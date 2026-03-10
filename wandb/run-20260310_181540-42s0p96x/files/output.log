@@ -1,0 +1,12 @@
+
+--- Epoch 1/13 ---
+Traceback (most recent call last):
+  File "C:\Users\samyb\PythonProjects\morpheus\training\train.py", line 425, in <module>
+    train()
+    ~~~~~^^
+  File "C:\Users\samyb\PythonProjects\morpheus\training\train.py", line 355, in train
+    loss   = diffusion_loss(logits, labels, timesteps)
+  File "C:\Users\samyb\PythonProjects\morpheus\training\train.py", line 79, in diffusion_loss
+    logits.view(-1, vocab_size),
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^
+KeyboardInterrupt

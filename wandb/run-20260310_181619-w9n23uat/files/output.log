@@ -1,0 +1,501 @@
+
+--- Epoch 1/10 ---
+Step     50 | loss: 2.4338 | grad_norm: 2.8474 | lr: 3.00e-05
+Step    100 | loss: 1.9302 | grad_norm: 1.6580 | lr: 6.00e-05
+Step    150 | loss: 1.6831 | grad_norm: 0.8704 | lr: 9.00e-05
+Step    200 | loss: 1.4845 | grad_norm: 0.6350 | lr: 1.20e-04
+Step    250 | loss: 1.4394 | grad_norm: 0.4904 | lr: 1.50e-04
+Step    300 | loss: 1.3696 | grad_norm: 0.3340 | lr: 1.80e-04
+Step    350 | loss: 1.2938 | grad_norm: 0.5558 | lr: 2.10e-04
+Step    400 | loss: 1.2303 | grad_norm: 0.4987 | lr: 2.40e-04
+Step    450 | loss: 1.1945 | grad_norm: 0.7575 | lr: 2.70e-04
+Step    500 | loss: 1.2118 | grad_norm: 0.5435 | lr: 3.00e-04
+  → Val loss: 1.2208
+
+============================================================
+  GENERATED MOLECULES — Step 500
+============================================================
+  [0] ✅ 38 tokens | LogP: +0.00 | Heavy:  3 | Rings: 0 | C=C=O
+  [1] ✅ 2 tokens | LogP: +1.03 | Heavy:  2 | Rings: 0 | C[P]
+  [2] ✅ 61 tokens | LogP: +3.38 | Heavy: 18 | Rings: 1 | [CH]CC1(C)CCC=CS#C[SH](CNOO)N=C1C
+  [3] ✅ 7 tokens | LogP: +1.03 | Heavy:  2 | Rings: 0 | CC
+  [4] ✅ 35 tokens | LogP: -1.74 | Heavy:  1 | Rings: 0 | [NH+]
+  [5] ✅ 39 tokens | LogP: +2.81 | Heavy: 17 | Rings: 3 | C=CC1=CC([N-])=C(C[C@@H]2NC3=C2C=C3)N=CC1
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 1.2208)
+Step    550 | loss: 1.2323 | grad_norm: 0.7833 | lr: 3.30e-04
+Step    600 | loss: 1.2008 | grad_norm: 0.8869 | lr: 3.60e-04
+Step    650 | loss: 1.1802 | grad_norm: 0.5978 | lr: 3.90e-04
+Step    700 | loss: 1.2156 | grad_norm: 0.5227 | lr: 4.20e-04
+Step    750 | loss: 1.2132 | grad_norm: 2.4638 | lr: 4.50e-04
+Step    800 | loss: 1.2067 | grad_norm: 0.5448 | lr: 4.80e-04
+Step    850 | loss: 1.1695 | grad_norm: 0.5600 | lr: 5.10e-04
+Step    900 | loss: 1.2230 | grad_norm: 0.7768 | lr: 5.40e-04
+
+--- Epoch 2/10 ---
+Step    950 | loss: 1.1724 | grad_norm: 0.5357 | lr: 5.70e-04
+Step   1000 | loss: 1.1414 | grad_norm: 0.5023 | lr: 6.00e-04
+  → Val loss: 1.1199
+
+============================================================
+  GENERATED MOLECULES — Step 1000
+============================================================
+  [0] ✅ 14 tokens | LogP: +0.05 | Heavy:  3 | Rings: 0 | [CH]C=[S-]
+  [1] ✅ 15 tokens | LogP: +0.55 | Heavy:  2 | Rings: 0 | CS
+  [2] ✅ 12 tokens | LogP: +0.55 | Heavy:  4 | Rings: 0 | [N+][P+]S[N+]
+  [3] ✅ 26 tokens | LogP: +0.77 | Heavy:  8 | Rings: 0 | C[N-][C]S[C]C=S=O
+  [4] ✅ 10 tokens | LogP: +0.21 | Heavy:  2 | Rings: 0 | [N+]Cl
+  [5] ✅ 74 tokens | LogP: +0.00 | Heavy:  6 | Rings: 0 | [S][S-]C[CH][NH+]Br
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 1.1199)
+  💾 Checkpoint saved at step 1000
+Step   1050 | loss: 1.1280 | grad_norm: 0.4336 | lr: 6.00e-04
+Step   1100 | loss: 1.1324 | grad_norm: 0.4865 | lr: 6.00e-04
+Step   1150 | loss: 1.0715 | grad_norm: 0.7629 | lr: 6.00e-04
+Step   1200 | loss: 1.0383 | grad_norm: 0.5251 | lr: 5.99e-04
+Step   1250 | loss: 1.0887 | grad_norm: 1.1948 | lr: 5.99e-04
+Step   1300 | loss: 1.0543 | grad_norm: 0.5426 | lr: 5.98e-04
+Step   1350 | loss: 0.9802 | grad_norm: 0.7120 | lr: 5.97e-04
+Step   1400 | loss: 1.0008 | grad_norm: 0.7736 | lr: 5.97e-04
+Step   1450 | loss: 1.0272 | grad_norm: 0.6419 | lr: 5.96e-04
+Step   1500 | loss: 1.0095 | grad_norm: 0.6376 | lr: 5.95e-04
+  → Val loss: 0.9446
+
+============================================================
+  GENERATED MOLECULES — Step 1500
+============================================================
+  [0] ✅ 74 tokens | LogP: -1.05 | Heavy:  4 | Rings: 0 | [NH3+]CN=O
+  [1] ✅ 25 tokens | LogP: -0.25 | Heavy:  6 | Rings: 0 | C=C(C)[CH][S]=[NH2+]
+  [2] ✅ 23 tokens | LogP: +1.06 | Heavy: 11 | Rings: 0 | [CH]C[NH2+]P=[S]C=CN=CCBr
+  [3] ✅ 19 tokens | LogP: +1.44 | Heavy:  4 | Rings: 0 | C[CH][CH]C
+  [4] ✅ 74 tokens | LogP: +1.61 | Heavy:  6 | Rings: 0 | [N-]=NCCC=[P]
+  [5] ✅ 17 tokens | LogP: +0.11 | Heavy:  4 | Rings: 0 | COC#N
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.9446)
+Step   1550 | loss: 0.9354 | grad_norm: 0.7828 | lr: 5.93e-04
+Step   1600 | loss: 0.9366 | grad_norm: 0.8938 | lr: 5.92e-04
+Step   1650 | loss: 0.9147 | grad_norm: 1.1723 | lr: 5.91e-04
+Step   1700 | loss: 0.9494 | grad_norm: 0.6545 | lr: 5.89e-04
+Step   1750 | loss: 0.9534 | grad_norm: 0.7010 | lr: 5.88e-04
+Step   1800 | loss: 0.9438 | grad_norm: 0.7925 | lr: 5.86e-04
+Step   1850 | loss: 0.8884 | grad_norm: 0.5553 | lr: 5.84e-04
+
+--- Epoch 3/10 ---
+Step   1900 | loss: 0.9392 | grad_norm: 0.6112 | lr: 5.83e-04
+Step   1950 | loss: 0.9027 | grad_norm: 0.7169 | lr: 5.81e-04
+Step   2000 | loss: 0.8883 | grad_norm: 0.5015 | lr: 5.79e-04
+  → Val loss: 0.8598
+
+============================================================
+  GENERATED MOLECULES — Step 2000
+============================================================
+  [0] ✅ 29 tokens | LogP: +1.15 | Heavy:  7 | Rings: 1 | O=CCC1C=CC1
+  [1] ✅ 6 tokens | LogP: +1.08 | Heavy:  4 | Rings: 0 | CC=CO
+  [2] ✅ 2 tokens | LogP: -0.42 | Heavy:  2 | Rings: 0 | CN
+  [3] ✅ 3 tokens | LogP: -0.00 | Heavy:  3 | Rings: 0 | CCO
+  [4] ✅ 74 tokens | LogP: -0.83 | Heavy: 13 | Rings: 2 | C[NH2+]C1C2CC=CCC2C[CH-][NH+]1C
+  [5] ✅ 22 tokens | LogP: +0.23 | Heavy:  7 | Rings: 1 | CC1C#CCNC1
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.8598)
+  💾 Checkpoint saved at step 2000
+Step   2050 | loss: 0.8687 | grad_norm: 0.8297 | lr: 5.76e-04
+Step   2100 | loss: 0.9039 | grad_norm: 0.9972 | lr: 5.74e-04
+Step   2150 | loss: 0.9093 | grad_norm: 0.6238 | lr: 5.72e-04
+Step   2200 | loss: 0.8796 | grad_norm: 0.6617 | lr: 5.69e-04
+Step   2250 | loss: 0.8916 | grad_norm: 0.6747 | lr: 5.67e-04
+Step   2300 | loss: 0.8690 | grad_norm: 0.7289 | lr: 5.64e-04
+Step   2350 | loss: 0.8621 | grad_norm: 0.5916 | lr: 5.61e-04
+Step   2400 | loss: 0.8700 | grad_norm: 0.6377 | lr: 5.58e-04
+Step   2450 | loss: 0.8963 | grad_norm: 0.6592 | lr: 5.55e-04
+Step   2500 | loss: 0.8349 | grad_norm: 0.5050 | lr: 5.52e-04
+  → Val loss: 0.8172
+
+============================================================
+  GENERATED MOLECULES — Step 2500
+============================================================
+  [0] ✅ 28 tokens | LogP: +0.17 | Heavy: 16 | Rings: 1 | CCCCNC(=O)CC1=S(CC)C(F)C=[NH+]1
+  [1] ✅ 24 tokens | LogP: +2.01 | Heavy: 11 | Rings: 0 | CCC=C=[P]=[SH+]C(C=O)CC
+  [2] ✅ 74 tokens | LogP: +0.61 | Heavy:  7 | Rings: 0 | CCOCCC=O
+  [3] ✅ 4 tokens | LogP: +1.03 | Heavy:  2 | Rings: 0 | CC
+  [4] ✅ 20 tokens | LogP: +2.12 | Heavy:  9 | Rings: 0 | CCCC(C)C(=O)OCl
+  [5] ✅ 6 tokens | LogP: -0.82 | Heavy:  5 | Rings: 0 | [CH]=[NH+]C=CC
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.8172)
+Step   2550 | loss: 0.8563 | grad_norm: 0.6437 | lr: 5.49e-04
+Step   2600 | loss: 0.8632 | grad_norm: 0.7641 | lr: 5.46e-04
+Step   2650 | loss: 0.8229 | grad_norm: 0.6226 | lr: 5.43e-04
+Step   2700 | loss: 0.8768 | grad_norm: 0.6222 | lr: 5.39e-04
+Step   2750 | loss: 0.8727 | grad_norm: 0.5911 | lr: 5.36e-04
+
+--- Epoch 4/10 ---
+Step   2800 | loss: 0.8541 | grad_norm: 0.5043 | lr: 5.32e-04
+Step   2850 | loss: 0.8470 | grad_norm: 0.6180 | lr: 5.29e-04
+Step   2900 | loss: 0.8268 | grad_norm: 0.4934 | lr: 5.25e-04
+Step   2950 | loss: 0.8260 | grad_norm: 0.5975 | lr: 5.21e-04
+Step   3000 | loss: 0.8298 | grad_norm: 0.5663 | lr: 5.17e-04
+  → Val loss: 0.7918
+
+============================================================
+  GENERATED MOLECULES — Step 3000
+============================================================
+  [0] ✅ 5 tokens | LogP: +1.66 | Heavy:  5 | Rings: 0 | [CH]C=CCC
+  [1] ✅ 74 tokens | LogP: +1.25 | Heavy:  3 | Rings: 0 | CCCl
+  [2] ✅ 5 tokens | LogP: +0.65 | Heavy:  5 | Rings: 0 | C=CC=CN
+  [3] ✅ 28 tokens | LogP: +2.15 | Heavy: 10 | Rings: 0 | CCCC[C]CC(S)C=O
+  [4] ✅ 1 tokens | LogP: -1.52 | Heavy:  1 | Rings: 0 | [NH2+]
+  [5] ✅ 3 tokens | LogP: +1.03 | Heavy:  2 | Rings: 0 | CC
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.7918)
+  💾 Checkpoint saved at step 3000
+Step   3050 | loss: 0.8479 | grad_norm: 0.7063 | lr: 5.13e-04
+Step   3100 | loss: 0.8399 | grad_norm: 0.6470 | lr: 5.09e-04
+Step   3150 | loss: 0.8037 | grad_norm: 0.6239 | lr: 5.05e-04
+Step   3200 | loss: 0.7863 | grad_norm: 0.5578 | lr: 5.01e-04
+Step   3250 | loss: 0.7585 | grad_norm: 0.5086 | lr: 4.96e-04
+Step   3300 | loss: 0.8129 | grad_norm: 0.4531 | lr: 4.92e-04
+Step   3350 | loss: 0.8042 | grad_norm: 0.6230 | lr: 4.88e-04
+Step   3400 | loss: 0.8054 | grad_norm: 0.5854 | lr: 4.83e-04
+Step   3450 | loss: 0.8404 | grad_norm: 0.6177 | lr: 4.79e-04
+Step   3500 | loss: 0.7948 | grad_norm: 0.6729 | lr: 4.74e-04
+  → Val loss: 0.7774
+
+============================================================
+  GENERATED MOLECULES — Step 3500
+============================================================
+  [0] ✅ 33 tokens | LogP: +1.96 | Heavy: 21 | Rings: 1 | COC(=O)C=CC=CC1NS(=O)CCCC=NCC=CS1
+  [1] ✅ 74 tokens | LogP: -1.02 | Heavy:  2 | Rings: 0 | [NH-][NH2+]
+  [2] ✅ 5 tokens | LogP: +1.19 | Heavy:  3 | Rings: 0 | CSS
+  [3] ✅ 6 tokens | LogP: +1.33 | Heavy:  6 | Rings: 0 | C=CC=COC
+  [4] ✅ 36 tokens | LogP: +0.80 | Heavy:  4 | Rings: 1 | [N-]C1[CH]C1
+  [5] ✅ 0 tokens | LogP: +0.00 | Heavy:  0 | Rings: 0 |
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.7774)
+Step   3550 | loss: 0.7882 | grad_norm: 0.6681 | lr: 4.69e-04
+Step   3600 | loss: 0.8088 | grad_norm: 0.6088 | lr: 4.65e-04
+Step   3650 | loss: 0.8085 | grad_norm: 0.9807 | lr: 4.60e-04
+Step   3700 | loss: 0.7658 | grad_norm: 0.4721 | lr: 4.55e-04
+
+--- Epoch 5/10 ---
+Step   3750 | loss: 0.7916 | grad_norm: 0.5660 | lr: 4.50e-04
+Step   3800 | loss: 0.7849 | grad_norm: 0.4774 | lr: 4.45e-04
+Step   3850 | loss: 0.8143 | grad_norm: 0.4491 | lr: 4.40e-04
+Step   3900 | loss: 0.8273 | grad_norm: 0.7978 | lr: 4.35e-04
+Step   3950 | loss: 0.7942 | grad_norm: 0.4595 | lr: 4.30e-04
+Step   4000 | loss: 0.7978 | grad_norm: 0.5990 | lr: 4.25e-04
+  → Val loss: 0.7561
+
+============================================================
+  GENERATED MOLECULES — Step 4000
+============================================================
+  [0] ✅ 8 tokens | LogP: -0.75 | Heavy:  4 | Rings: 0 | CC(N)N
+  [1] ✅ 35 tokens | LogP: +3.29 | Heavy: 19 | Rings: 0 | CC[CH]C(=O)CCCN(F)C(=O)N[CH]C=CC(F)I
+  [2] ✅ 74 tokens | LogP: +2.92 | Heavy: 21 | Rings: 1 | NCSC=CCSC(=O)N=C=PNC=CC1=CC=CCN1
+  [3] ✅ 30 tokens | LogP: +2.62 | Heavy: 19 | Rings: 0 | CCOC=CCC(=O)CCNC(=O)CCCC=CS
+  [4] ✅ 74 tokens | LogP: +0.98 | Heavy:  4 | Rings: 0 | COCBr
+  [5] ✅ 5 tokens | LogP: -0.75 | Heavy:  3 | Rings: 0 | CC[NH3+]
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.7561)
+  💾 Checkpoint saved at step 4000
+Step   4050 | loss: 0.7720 | grad_norm: 0.5398 | lr: 4.19e-04
+Step   4100 | loss: 0.7853 | grad_norm: 0.5515 | lr: 4.14e-04
+Step   4150 | loss: 0.8004 | grad_norm: 0.4844 | lr: 4.09e-04
+Step   4200 | loss: 0.6950 | grad_norm: 0.6255 | lr: 4.04e-04
+Step   4250 | loss: 0.7776 | grad_norm: 0.4514 | lr: 3.98e-04
+Step   4300 | loss: 0.7765 | grad_norm: 0.5447 | lr: 3.93e-04
+Step   4350 | loss: 0.7848 | grad_norm: 0.5276 | lr: 3.87e-04
+Step   4400 | loss: 0.7842 | grad_norm: 0.6753 | lr: 3.82e-04
+Step   4450 | loss: 0.7371 | grad_norm: 0.5069 | lr: 3.76e-04
+Step   4500 | loss: 0.8014 | grad_norm: 0.6911 | lr: 3.71e-04
+  → Val loss: 0.7466
+
+============================================================
+  GENERATED MOLECULES — Step 4500
+============================================================
+  [0] ✅ 36 tokens | LogP: -0.34 | Heavy: 14 | Rings: 1 | CC1OC=CC=C1NNCC(=O)C=O
+  [1] ✅ 32 tokens | LogP: +3.40 | Heavy: 22 | Rings: 1 | CO/C=C/C=C(CCC=O)CCCC(=O)N1CC=CC[C@@H]1C
+  [2] ✅ 14 tokens | LogP: -1.06 | Heavy:  9 | Rings: 0 | CC[NH2+]NOC(=O)CC
+  [3] ✅ 38 tokens | LogP: -1.56 | Heavy: 16 | Rings: 0 | CC(C)=NNC(=O)C[S-]CC(=O)N(N)C=O
+  [4] ✅ 35 tokens | LogP: -0.74 | Heavy: 18 | Rings: 1 | O=CCC([O-])[C](O)C[C@H]1CCNC(=O)OC(=O)C1
+  [5] ✅ 39 tokens | LogP: +0.37 | Heavy:  4 | Rings: 0 | C=CC=O
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.7466)
+Step   4550 | loss: 0.7558 | grad_norm: 0.5816 | lr: 3.65e-04
+Step   4600 | loss: 0.8006 | grad_norm: 0.4972 | lr: 3.60e-04
+
+--- Epoch 6/10 ---
+Step   4650 | loss: 0.7079 | grad_norm: 0.5196 | lr: 3.54e-04
+Step   4700 | loss: 0.7335 | grad_norm: 0.4560 | lr: 3.48e-04
+Step   4750 | loss: 0.8112 | grad_norm: 0.5207 | lr: 3.43e-04
+Step   4800 | loss: 0.7766 | grad_norm: 0.5136 | lr: 3.37e-04
+Step   4850 | loss: 0.7626 | grad_norm: 0.5583 | lr: 3.31e-04
+Step   4900 | loss: 0.7741 | grad_norm: 0.5700 | lr: 3.26e-04
+Step   4950 | loss: 0.8437 | grad_norm: 0.8987 | lr: 3.20e-04
+Step   5000 | loss: 0.7491 | grad_norm: 0.5344 | lr: 3.14e-04
+  → Val loss: 0.7358
+
+============================================================
+  GENERATED MOLECULES — Step 5000
+============================================================
+  [0] ✅ 74 tokens | LogP: +0.57 | Heavy: 18 | Rings: 1 | C#CC=CC=C(C[NH])[NH2+]CCC(=O)C1CC1(C)S
+  [1] ✅ 36 tokens | LogP: +2.65 | Heavy: 23 | Rings: 1 | CC(=O)CCCCCC(=O)CC(=O)[CH]NC(=O)c1ccccc1
+  [2] ✅ 35 tokens | LogP: +2.79 | Heavy: 22 | Rings: 0 | CCCN=C(C=NCC)CCCNC(=O)C=CC(F)C=CO
+  [3] ✅ 40 tokens | LogP: -0.16 | Heavy:  4 | Rings: 0 | C=NC=O
+  [4] ✅ 42 tokens | LogP: +3.43 | Heavy: 19 | Rings: 2 | CC=C1C=CC2C=C1N([C@H](CC)OC=C(C)F)C2=O
+  [5] ✅ 6 tokens | LogP: +1.01 | Heavy:  6 | Rings: 0 | CCCNCC
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.7358)
+  💾 Checkpoint saved at step 5000
+Step   5050 | loss: 0.7952 | grad_norm: 0.5025 | lr: 3.09e-04
+Step   5100 | loss: 0.7609 | grad_norm: 0.6062 | lr: 3.03e-04
+Step   5150 | loss: 0.7364 | grad_norm: 0.4941 | lr: 2.97e-04
+Step   5200 | loss: 0.7625 | grad_norm: 0.5321 | lr: 2.91e-04
+Step   5250 | loss: 0.7136 | grad_norm: 0.4673 | lr: 2.86e-04
+Step   5300 | loss: 0.7765 | grad_norm: 0.5021 | lr: 2.80e-04
+Step   5350 | loss: 0.7464 | grad_norm: 0.6669 | lr: 2.74e-04
+Step   5400 | loss: 0.7234 | grad_norm: 0.5490 | lr: 2.69e-04
+Step   5450 | loss: 0.7695 | grad_norm: 0.5249 | lr: 2.63e-04
+Step   5500 | loss: 0.7158 | grad_norm: 0.5996 | lr: 2.57e-04
+  → Val loss: 0.7274
+
+============================================================
+  GENERATED MOLECULES — Step 5500
+============================================================
+  [0] ✅ 5 tokens | LogP: +1.97 | Heavy:  5 | Rings: 0 | C=CCCC
+  [1] ✅ 74 tokens | LogP: +1.40 | Heavy: 10 | Rings: 0 | CC(=O)[CH]CC[C@@H](C)C=O
+  [2] ✅ 47 tokens | LogP: +2.26 | Heavy: 25 | Rings: 3 | NC1CC2C=CC=C1C=C1CCOCO[CH]CC[CH]C(=O)C(=O)[CH]C12
+  [3] ✅ 36 tokens | LogP: +2.69 | Heavy: 27 | Rings: 1 | CC(=O)N[CH]CCC[CH]NC(=O)N=CC=Nc1ccccc1C=CC=C[O-]
+  [4] ✅ 5 tokens | LogP: +0.20 | Heavy:  3 | Rings: 0 | CC=O
+  [5] ✅ 41 tokens | LogP: +1.31 | Heavy: 27 | Rings: 4 | CCOC=CC=C1C(=O)NC(=O)CC2NC3=CC=C1NCCOC=CC=C32
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.7274)
+Step   5550 | loss: 0.6908 | grad_norm: 0.4546 | lr: 2.52e-04
+
+--- Epoch 7/10 ---
+Step   5600 | loss: 0.7334 | grad_norm: 0.4029 | lr: 2.46e-04
+Step   5650 | loss: 0.7437 | grad_norm: 0.4821 | lr: 2.40e-04
+Step   5700 | loss: 0.7200 | grad_norm: 0.4995 | lr: 2.35e-04
+Step   5750 | loss: 0.7447 | grad_norm: 0.4720 | lr: 2.29e-04
+Step   5800 | loss: 0.7095 | grad_norm: 0.4420 | lr: 2.24e-04
+Step   5850 | loss: 0.7359 | grad_norm: 0.4463 | lr: 2.18e-04
+Step   5900 | loss: 0.7250 | grad_norm: 0.4623 | lr: 2.13e-04
+Step   5950 | loss: 0.7353 | grad_norm: 0.7646 | lr: 2.07e-04
+Step   6000 | loss: 0.7343 | grad_norm: 0.4428 | lr: 2.02e-04
+  → Val loss: 0.7135
+
+============================================================
+  GENERATED MOLECULES — Step 6000
+============================================================
+  [0] ✅ 35 tokens | LogP: +1.76 | Heavy: 18 | Rings: 0 | CC=CN=CC(CS)NS(=O)C(=O)C=CC(F)Cl
+  [1] ✅ 74 tokens | LogP: +0.71 | Heavy: 17 | Rings: 1 | N=CCCNOC(=O)C(=O)Nc1ccccc1
+  [2] ✅ 39 tokens | LogP: +1.17 | Heavy: 28 | Rings: 1 | [NH3+]CCC(=O)CCNS(=O)(=O)C1=CC=CC[SH]1OC(=O)CCCC=CC=CO
+  [3] ✅ 36 tokens | LogP: +0.42 | Heavy: 17 | Rings: 0 | COC=CCNC(C)[CH]CCCNC(=O)C=O
+  [4] ✅ 23 tokens | LogP: +0.32 | Heavy: 14 | Rings: 0 | CC=NC=CC(=O)NC(=O)CC=NC
+  [5] ✅ 36 tokens | LogP: -1.73 | Heavy:  5 | Rings: 1 | C1=NC[NH+]O1
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.7135)
+  💾 Checkpoint saved at step 6000
+Step   6050 | loss: 0.7154 | grad_norm: 0.5492 | lr: 1.96e-04
+Step   6100 | loss: 0.7541 | grad_norm: 0.4978 | lr: 1.91e-04
+Step   6150 | loss: 0.7226 | grad_norm: 0.5472 | lr: 1.86e-04
+Step   6200 | loss: 0.7557 | grad_norm: 0.4944 | lr: 1.81e-04
+Step   6250 | loss: 0.7493 | grad_norm: 0.5439 | lr: 1.75e-04
+Step   6300 | loss: 0.7231 | grad_norm: 0.4915 | lr: 1.70e-04
+Step   6350 | loss: 0.7600 | grad_norm: 0.6357 | lr: 1.65e-04
+Step   6400 | loss: 0.7851 | grad_norm: 0.4684 | lr: 1.60e-04
+Step   6450 | loss: 0.7432 | grad_norm: 0.5777 | lr: 1.55e-04
+
+--- Epoch 8/10 ---
+Step   6500 | loss: 0.7640 | grad_norm: 0.4433 | lr: 1.50e-04
+  → Val loss: 0.7182
+
+============================================================
+  GENERATED MOLECULES — Step 6500
+============================================================
+  [0] ✅ 6 tokens | LogP: +1.37 | Heavy:  6 | Rings: 0 | C=COC[CH]C
+  [1] ✅ 7 tokens | LogP: +1.03 | Heavy:  7 | Rings: 0 | [CH]NN=CCCC
+  [2] ✅ 42 tokens | LogP: -1.15 | Heavy: 12 | Rings: 1 | O=C([O-])NC1=NCOC=CC=N1
+  [3] ✅ 74 tokens | LogP: +0.10 | Heavy: 19 | Rings: 0 | C[SH]([CH]PCN)C(=O)[CH]CCCCC(=O)NCC[O-]
+  [4] ✅ 34 tokens | LogP: +1.28 | Heavy: 22 | Rings: 2 | CC=NC1CC2=CC=CCC2NC(=S)CNC(=O)C[CH]CN1
+  [5] ✅ 74 tokens | LogP: +1.19 | Heavy: 23 | Rings: 1 | CCOC#CNC(=O)CC(=O)Nc1ccccc1CC=[SH]#CO
+
+  Valid: 6/6 (100%)
+============================================================
+
+Step   6550 | loss: 0.7216 | grad_norm: 0.5144 | lr: 1.45e-04
+Step   6600 | loss: 0.7543 | grad_norm: 0.4767 | lr: 1.40e-04
+Step   6650 | loss: 0.7207 | grad_norm: 0.4831 | lr: 1.35e-04
+Step   6700 | loss: 0.7549 | grad_norm: 0.4302 | lr: 1.31e-04
+Step   6750 | loss: 0.7305 | grad_norm: 1.7824 | lr: 1.26e-04
+Step   6800 | loss: 0.7566 | grad_norm: 0.5504 | lr: 1.21e-04
+Step   6850 | loss: 0.7424 | grad_norm: 0.4933 | lr: 1.17e-04
+Step   6900 | loss: 0.7656 | grad_norm: 0.9886 | lr: 1.12e-04
+Step   6950 | loss: 0.7503 | grad_norm: 0.5380 | lr: 1.08e-04
+Step   7000 | loss: 0.7572 | grad_norm: 0.6574 | lr: 1.04e-04
+  → Val loss: 0.7111
+
+============================================================
+  GENERATED MOLECULES — Step 7000
+============================================================
+  [0] ✅ 39 tokens | LogP: +0.09 | Heavy: 13 | Rings: 0 | CC(C)CC=CC(=O)CNC(=O)[O-]
+  [1] ✅ 29 tokens | LogP: -0.54 | Heavy: 19 | Rings: 0 | CC(C)C[NH+](C)CCC(=O)NCCC(=O)[C@@H](C)C=O
+  [2] ✅ 26 tokens | LogP: -0.62 | Heavy: 14 | Rings: 1 | CC[NH2+]C(C)[NH2+]C1CCCCC(=O)C1
+  [3] ✅ 74 tokens | LogP: +0.27 | Heavy: 13 | Rings: 0 | CCC(=O)C[CH]CCCNC(=O)[O-]
+  [4] ✅ 41 tokens | LogP: -0.15 | Heavy: 24 | Rings: 1 | CC(=O)NC=CC=C(CC=CS)NC(=O)O[C@@H]1COCC1C(=O)[O-]
+  [5] ✅ 74 tokens | LogP: +1.22 | Heavy: 23 | Rings: 2 | COC(=O)CCCC[C@H](P)C(=O)C=c1[nH]cc2c1=CNC(Cl)=C2
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.7111)
+  💾 Checkpoint saved at step 7000
+Step   7050 | loss: 0.7192 | grad_norm: 0.4640 | lr: 9.93e-05
+Step   7100 | loss: 0.7039 | grad_norm: 0.4934 | lr: 9.51e-05
+Step   7150 | loss: 0.7750 | grad_norm: 0.5073 | lr: 9.09e-05
+Step   7200 | loss: 0.7337 | grad_norm: 0.5164 | lr: 8.69e-05
+Step   7250 | loss: 0.7389 | grad_norm: 0.5087 | lr: 8.29e-05
+Step   7300 | loss: 0.7111 | grad_norm: 0.5075 | lr: 7.90e-05
+Step   7350 | loss: 0.7001 | grad_norm: 0.5280 | lr: 7.52e-05
+Step   7400 | loss: 0.6987 | grad_norm: 0.4605 | lr: 7.14e-05
+
+--- Epoch 9/10 ---
+Step   7450 | loss: 0.7307 | grad_norm: 0.4713 | lr: 6.78e-05
+Step   7500 | loss: 0.7025 | grad_norm: 0.4817 | lr: 6.42e-05
+  → Val loss: 0.6977
+
+============================================================
+  GENERATED MOLECULES — Step 7500
+============================================================
+  [0] ✅ 74 tokens | LogP: +1.16 | Heavy: 14 | Rings: 3 | C[C@@H]1NN(C=C[C@]23C=C2C[CH]C3)C1=O
+  [1] ✅ 74 tokens | LogP: +1.50 | Heavy: 25 | Rings: 2 | CC1NC(NC(=O)CCC(=O)c2ccccc2[N+](=O)[O-])=CC=CNO1
+  [2] ✅ 5 tokens | LogP: +1.42 | Heavy:  3 | Rings: 0 | CCC
+  [3] ✅ 39 tokens | LogP: +1.26 | Heavy: 26 | Rings: 1 | CCOC(=O)[CH]CC=CC1(CC(=O)CNC=CC=COC=NNN)C=C1
+  [4] ✅ 39 tokens | LogP: +1.58 | Heavy: 21 | Rings: 0 | CC(=O)CCN[CH]C=CNC(=O)CC(C)N=COC(C)C
+  [5] ✅ 33 tokens | LogP: +0.68 | Heavy: 16 | Rings: 0 | CC(=O)C=CC=C(O)NC(=O)NSCC=O
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.6977)
+Step   7550 | loss: 0.7743 | grad_norm: 0.4861 | lr: 6.07e-05
+Step   7600 | loss: 0.7052 | grad_norm: 0.4300 | lr: 5.73e-05
+Step   7650 | loss: 0.7099 | grad_norm: 0.4893 | lr: 5.40e-05
+Step   7700 | loss: 0.6880 | grad_norm: 0.4293 | lr: 5.08e-05
+Step   7750 | loss: 0.6948 | grad_norm: 0.4471 | lr: 4.76e-05
+Step   7800 | loss: 0.7159 | grad_norm: 0.9195 | lr: 4.46e-05
+Step   7850 | loss: 0.7300 | grad_norm: 0.4916 | lr: 4.16e-05
+Step   7900 | loss: 0.6576 | grad_norm: 0.4355 | lr: 3.88e-05
+Step   7950 | loss: 0.6881 | grad_norm: 0.4928 | lr: 3.60e-05
+Step   8000 | loss: 0.7500 | grad_norm: 0.4970 | lr: 3.33e-05
+  → Val loss: 0.7004
+
+============================================================
+  GENERATED MOLECULES — Step 8000
+============================================================
+  [0] ✅ 39 tokens | LogP: -1.19 | Heavy: 23 | Rings: 1 | NNC=NN=CNS(=O)CC(=O)NCC=CNc1cccnc1
+  [1] ✅ 33 tokens | LogP: +2.97 | Heavy: 22 | Rings: 1 | CCCC(=O)OC=CC=CC(=O)NC(=O)CC1=CSC=CC1
+  [2] ✅ 43 tokens | LogP: +2.11 | Heavy: 28 | Rings: 1 | CCOC=CC=CCNC(=O)CONC=CC(S)C(=O)N(C)C1C=CCCC1
+  [3] ✅ 39 tokens | LogP: +0.28 | Heavy:  9 | Rings: 1 | O=C1CC[C@@H](F)CNC1
+  [4] ✅ 43 tokens | LogP: +0.20 | Heavy: 13 | Rings: 0 | CCNC=CC(C=O)NC(=O)CC
+  [5] ✅ 38 tokens | LogP: +0.36 | Heavy: 25 | Rings: 1 | C[CH]CC=C(F)C=CCNC(=O)NC(=O)N[CH]C1C[NH+]CCC1C=O
+
+  Valid: 6/6 (100%)
+============================================================
+
+  💾 Checkpoint saved at step 8000
+Step   8050 | loss: 0.7726 | grad_norm: 0.5160 | lr: 3.08e-05
+Step   8100 | loss: 0.6887 | grad_norm: 0.5035 | lr: 2.83e-05
+Step   8150 | loss: 0.7846 | grad_norm: 0.6846 | lr: 2.59e-05
+Step   8200 | loss: 0.6830 | grad_norm: 0.4899 | lr: 2.37e-05
+Step   8250 | loss: 0.6695 | grad_norm: 0.5199 | lr: 2.15e-05
+Step   8300 | loss: 0.7421 | grad_norm: 0.4717 | lr: 1.94e-05
+
+--- Epoch 10/10 ---
+Step   8350 | loss: 0.7598 | grad_norm: 0.5248 | lr: 1.74e-05
+Step   8400 | loss: 0.7540 | grad_norm: 0.5047 | lr: 1.56e-05
+Step   8450 | loss: 0.6960 | grad_norm: 0.5437 | lr: 1.38e-05
+Step   8500 | loss: 0.7142 | grad_norm: 0.5568 | lr: 1.22e-05
+  → Val loss: 0.6970
+
+============================================================
+  GENERATED MOLECULES — Step 8500
+============================================================
+  [0] ✅ 43 tokens | LogP: +2.59 | Heavy: 26 | Rings: 1 | C=Cc1ccncc1C(=O)CC[CH]NC(=O)CNC(=O)C=C=CCCC
+  [1] ✅ 37 tokens | LogP: +1.97 | Heavy: 21 | Rings: 3 | [NH]C1CC[C@@H]1[CH][CH]C1C[C@@H]1C(=O)NCC1C=CC(Br)=CN1
+  [2] ✅ 40 tokens | LogP: +1.75 | Heavy: 20 | Rings: 2 | C[C](C[C@@H]1C=CCCN=C1)C(=O)N1CC=CC=C(N)O1
+  [3] ✅ 32 tokens | LogP: +2.00 | Heavy: 21 | Rings: 2 | C#CCC#CNC(=O)[CH]Nc1ccccc1NCC1[CH]C1
+  [4] ✅ 42 tokens | LogP: -3.38 | Heavy: 27 | Rings: 3 | CC(C)CNC(=O)C=CC=C1C2NC(=O)NN[CH][NH+]3CCCC3([NH+]=CN)C
+  [5] ✅ 36 tokens | LogP: +2.10 | Heavy: 19 | Rings: 1 | CC1CC=CC=CCC(=O)NC[CH]CON(C)CC1
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✅ New best model saved (val_loss: 0.6970)
+Step   8550 | loss: 0.7283 | grad_norm: 0.5461 | lr: 1.06e-05
+Step   8600 | loss: 0.7220 | grad_norm: 0.5072 | lr: 9.14e-06
+Step   8650 | loss: 0.6880 | grad_norm: 0.4307 | lr: 7.80e-06
+Step   8700 | loss: 0.6641 | grad_norm: 0.5782 | lr: 6.56e-06
+Step   8750 | loss: 0.7156 | grad_norm: 0.4854 | lr: 5.42e-06
+Step   8800 | loss: 0.7461 | grad_norm: 0.4986 | lr: 4.39e-06
+Step   8850 | loss: 0.6949 | grad_norm: 0.5876 | lr: 3.47e-06
+Step   8900 | loss: 0.7159 | grad_norm: 0.5592 | lr: 2.66e-06
+Step   8950 | loss: 0.7349 | grad_norm: 0.4657 | lr: 1.96e-06
+Step   9000 | loss: 0.7224 | grad_norm: 0.4809 | lr: 1.36e-06
+  → Val loss: 0.6995
+
+============================================================
+  GENERATED MOLECULES — Step 9000
+============================================================
+  [0] ✅ 42 tokens | LogP: +1.77 | Heavy: 26 | Rings: 3 | Cc1nccnc1[C@H](C)C1[CH]NC(=O)NC=NN(SC2=COCC=N2)C1
+  [1] ✅ 7 tokens | LogP: +1.74 | Heavy:  5 | Rings: 0 | [CH]CC(C)C
+  [2] ✅ 41 tokens | LogP: +2.27 | Heavy: 22 | Rings: 1 | C=CC=CC=CC(=N)[N-]C(=O)n1c(=O)ccn1C(=O)CSC
+  [3] ✅ 45 tokens | LogP: +1.56 | Heavy: 23 | Rings: 1 | [CH]=CCC(=O)C1=CC=CCN1CNC(=O)NC(CC=O)C(C)C
+  [4] ✅ 0 tokens | LogP: +0.00 | Heavy:  0 | Rings: 0 |
+  [5] ✅ 38 tokens | LogP: +2.14 | Heavy: 26 | Rings: 2 | CCCC[NH+](C)[C@H]1[CH]CC[C@H]1NC(=O)NC(=O)SCC[C]1C=CN=C
+
+  Valid: 6/6 (100%)
+============================================================
+
+  💾 Checkpoint saved at step 9000
+Step   9050 | loss: 0.6990 | grad_norm: 0.4610 | lr: 8.70e-07
+Step   9100 | loss: 0.7057 | grad_norm: 0.4734 | lr: 4.89e-07
+Step   9150 | loss: 0.7347 | grad_norm: 0.4650 | lr: 2.17e-07
+Step   9200 | loss: 0.7573 | grad_norm: 0.4762 | lr: 5.44e-08
+Step   9250 | loss: 0.6878 | grad_norm: 0.4229 | lr: 0.00e+00
+
+Training complete. Best val loss: 0.6970

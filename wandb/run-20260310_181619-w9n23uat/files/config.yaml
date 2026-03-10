@@ -1,0 +1,120 @@
+_wandb:
+    value:
+        cli_version: 0.25.0
+        e:
+            3gf63tplbdunx91v0jg6o6lypacc589b:
+                codePath: training\train.py
+                codePathLocal: training\train.py
+                cpu_count: 4
+                cpu_count_logical: 8
+                cudaVersion: "12.6"
+                disk:
+                    /:
+                        total: "511213301760"
+                        used: "495418048512"
+                email: vivaikmalik@gmail.com
+                executable: C:\Users\samyb\pytorch_gpu\Scripts\python.exe
+                git:
+                    commit: ace04b2e7e56b294d31380163f7b33e08f0c6a05
+                    remote: https://github.com/vivaikmalik/morpheus.git
+                gpu: NVIDIA GeForce GTX 970
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Maxwell
+                      cudaCores: 1664
+                      memoryTotal: "4294967296"
+                      name: NVIDIA GeForce GTX 970
+                      uuid: GPU-d4b2745d-bd90-8115-3305-173ef0cffa69
+                host: SB
+                memory:
+                    total: "34205458432"
+                os: Windows-11-10.0.26100-SP0
+                program: C:\Users\samyb\PythonProjects\morpheus\training\train.py
+                python: CPython 3.13.9
+                root: C:\Users\samyb\PythonProjects\morpheus
+                startedAt: "2026-03-10T22:16:19.149288Z"
+                writerId: 3gf63tplbdunx91v0jg6o6lypacc589b
+        m: []
+        python_version: 3.13.9
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 71
+                - 98
+            "2":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 71
+                - 98
+            "3":
+                - 2
+                - 16
+                - 61
+            "4": 3.13.9
+            "5": 0.25.0
+            "6": 5.3.0
+            "8":
+                - 3
+            "12": 0.25.0
+            "13": windows-amd64
+batch_size:
+    value: 256
+checkpoint_dir:
+    value: C:\Users\samyb\PythonProjects\morpheus\checkpoints
+dropout:
+    value: 0.1
+ffn_dim:
+    value: 288
+gen_num_mols:
+    value: 6
+gen_steps:
+    value: 32
+gen_temperature:
+    value: 1.2
+gradient_accumulation:
+    value: 1
+hidden_size:
+    value: 144
+learning_rate:
+    value: 0.0006
+log_every:
+    value: 50
+max_grad_norm:
+    value: 1
+max_length:
+    value: 74
+num_epochs:
+    value: 10
+num_heads:
+    value: 12
+num_layers:
+    value: 6
+num_workers:
+    value: 0
+project_root:
+    value: C:\Users\samyb\PythonProjects\morpheus
+save_every:
+    value: 1000
+seed:
+    value: 42
+val_every:
+    value: 500
+val_fraction:
+    value: 0.05
+vocab_size:
+    value: 110
+wandb_project:
+    value: morpheus-diffusion
+warmup_steps:
+    value: 1000
+weight_decay:
+    value: 0.01

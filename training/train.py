@@ -25,10 +25,10 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 CONFIG = {
     # Model
     "vocab_size"  : 110,
-    "hidden_size" : 256,
-    "num_heads"   : 8,
-    "ffn_dim"     : 512,
-    "num_layers"  : 8,
+    "hidden_size" : 144, #og 256
+    "num_heads"   : 12, #og 8
+    "ffn_dim"     : 288, #og 512
+    "num_layers"  : 6,
     "max_length"  : 74,
     "dropout"     : 0.1,
 
@@ -38,7 +38,7 @@ CONFIG = {
     "learning_rate"        : 6e-4,
     "weight_decay"         : 0.01,
     "max_grad_norm"        : 1.0,
-    "num_epochs"           : 13,
+    "num_epochs"           : 10,
     "warmup_steps"         : 1000,
 
     # Data
@@ -66,13 +66,14 @@ CONFIG = {
 # LOSS FUNCTION
 # =============================================================================
 
-def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
+def diffusion_loss(logits, labels, timesteps, pad_token_id=0, eos_token_id=2):
     B, seq_len, vocab_size = logits.shape
     device = logits.device
 
     vocab_weights = torch.ones(vocab_size, device=device)
 
-    vocab_weights[pad_token_id] = 0.1
+    vocab_weights[pad_token_id] = 0.05
+    vocab_weights[eos_token_id] = 5
 
     raw_loss = torch.nn.functional.cross_entropy(
         logits.view(-1, vocab_size),
