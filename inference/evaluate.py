@@ -97,8 +97,6 @@ def generate_batch(model, tokenizer, device, batch_size, config):
             logits = model(input_ids, step_t)                  # (B, max_length, vocab_size)
 
             # --- Step 3: Filter vocabulary ---
-            # Block PAD — never generate padding tokens
-            logits[:, :, tokenizer.pad_token_id] = float('-inf')
 
             # Block MASK at all steps including the last
             # The model should never output MASK as a final token

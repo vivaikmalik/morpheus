@@ -29,10 +29,6 @@ class ConditionalDiffusionCollator:
         # --- 5. Decide which tokens get masked ---
         noise_probs = torch.rand_like(input_ids.float())  # (B, 72) random per token
 
-        # PAD tokens should never be masked
-        pad_mask = (input_ids == self.pad_id)            # (B, 72) True where PAD
-        noise_probs.masked_fill_(pad_mask, 0.0)          # PAD positions won't be masked
-
         # A token gets masked if its random number exceeds alpha_t
         # High alpha_t (t≈0, clean) → most tokens survive
         # Low alpha_t  (t≈1, noisy) → most tokens get masked
@@ -44,13 +40,11 @@ class ConditionalDiffusionCollator:
         # --- 7. Build the labels ---
         # Only compute loss on positions that were actually masked
         labels[~mask_map] = -100    # not masked → ignore
-        labels[pad_mask]  = -100    # PAD → always ignore
 
         return {
             "input_ids":   input_ids,                    # (B, 72)  noisy input
             "labels":      labels,                       # (B, 72)  answer key
             "timesteps":   t.unsqueeze(-1),              # (B, 1)   noise level
-            "cond_values": cond_values.unsqueeze(-1)     # (B, 1)   LogP targets
         }
 
 
