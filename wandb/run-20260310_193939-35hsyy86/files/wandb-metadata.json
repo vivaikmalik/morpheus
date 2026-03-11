@@ -1,0 +1,40 @@
+{
+  "os":  "Windows-11-10.0.26100-SP0",
+  "python":  "CPython 3.13.9",
+  "startedAt":  "2026-03-10T23:39:39.891221Z",
+  "program":  "C:\\Users\\samyb\\PythonProjects\\morpheus\\training\\train.py",
+  "codePath":  "training\\train.py",
+  "codePathLocal":  "training\\train.py",
+  "git":  {
+    "remote":  "https://github.com/vivaikmalik/morpheus.git",
+    "commit":  "74ee1c166351332e3c0925a83399ab121d1fbe4b"
+  },
+  "email":  "vivaikmalik@gmail.com",
+  "root":  "C:\\Users\\samyb\\PythonProjects\\morpheus",
+  "host":  "SB",
+  "executable":  "C:\\Users\\samyb\\pytorch_gpu\\Scripts\\python.exe",
+  "cpu_count":  4,
+  "cpu_count_logical":  8,
+  "gpu":  "NVIDIA GeForce GTX 970",
+  "gpu_count":  1,
+  "disk":  {
+    "/":  {
+      "total":  "511213301760",
+      "used":  "495368712192"
+    }
+  },
+  "memory":  {
+    "total":  "34205458432"
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA GeForce GTX 970",
+      "memoryTotal":  "4294967296",
+      "cudaCores":  1664,
+      "architecture":  "Maxwell",
+      "uuid":  "GPU-d4b2745d-bd90-8115-3305-173ef0cffa69"
+    }
+  ],
+  "cudaVersion":  "12.6",
+  "writerId":  "am0qpm6co2cftm79f1nclrojoo5dsx6h"
+}

@@ -25,10 +25,10 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 CONFIG = {
     # Model
     "vocab_size"  : 110,
-    "hidden_size" : 144, #og 256
-    "num_heads"   : 12, #og 8
-    "ffn_dim"     : 288, #og 512
-    "num_layers"  : 6,
+    "hidden_size" : 256, #og 256
+    "num_heads"   : 8, #og 8
+    "ffn_dim"     : 512, #og 512
+    "num_layers"  : 8,
     "max_length"  : 74,
     "dropout"     : 0.1,
 
@@ -53,7 +53,7 @@ CONFIG = {
 
     # Generation
     "gen_steps"       : 32,    # MaskGIT denoising steps
-    "gen_temperature" : 1.2,   # > 1.0 = more random, < 1.0 = more greedy
+    "gen_temperature" : 0.9,   # > 1.0 = more random, < 1.0 = more greedy
     "gen_num_mols"    : 6,     # how many molecules to generate each time
 
     # Paths
@@ -72,7 +72,7 @@ def diffusion_loss(logits, labels, timesteps, pad_token_id=0, eos_token_id=2):
 
     vocab_weights = torch.ones(vocab_size, device=device)
 
-    vocab_weights[pad_token_id] = 0.05
+    vocab_weights[pad_token_id] = 0.1
     vocab_weights[eos_token_id] = 5
 
     raw_loss = torch.nn.functional.cross_entropy(

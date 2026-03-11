@@ -1,0 +1,49 @@
+
+--- Epoch 1/10 ---
+Step     50 | loss: 1.9815 | grad_norm: 1.7749 | lr: 3.00e-05
+Step    100 | loss: 1.6262 | grad_norm: 0.8535 | lr: 6.00e-05
+Step    150 | loss: 1.4897 | grad_norm: 0.4718 | lr: 9.00e-05
+Step    200 | loss: 1.3628 | grad_norm: 0.7767 | lr: 1.20e-04
+Step    250 | loss: 1.3037 | grad_norm: 0.6495 | lr: 1.50e-04
+Step    300 | loss: 1.2234 | grad_norm: 0.8000 | lr: 1.80e-04
+Step    350 | loss: 1.2297 | grad_norm: 1.9424 | lr: 2.10e-04
+Step    400 | loss: 1.2459 | grad_norm: 0.9950 | lr: 2.40e-04
+Traceback (most recent call last):
+  File "C:\Users\samyb\PythonProjects\morpheus\training\train.py", line 425, in <module>
+    train()
+    ~~~~~^^
+  File "C:\Users\samyb\PythonProjects\morpheus\training\train.py", line 365, in train
+    optimizer.step()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\optim\lr_scheduler.py", line 140, in wrapper
+    return func.__get__(opt, opt.__class__)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\optim\optimizer.py", line 493, in wrapper
+    out = func(*args, **kwargs)
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\optim\optimizer.py", line 91, in _use_grad
+    ret = func(self, *args, **kwargs)
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\optim\adamw.py", line 243, in step
+    adamw(
+    ~~~~~^
+        params_with_grad,
+        ^^^^^^^^^^^^^^^^^
+    ...<18 lines>...
+        has_complex=has_complex,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\optim\optimizer.py", line 154, in maybe_fallback
+    return func(*args, **kwargs)
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\optim\adamw.py", line 875, in adamw
+    func(
+    ~~~~^
+        params,
+        ^^^^^^^
+    ...<16 lines>...
+        has_complex=has_complex,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\optim\adamw.py", line 699, in _multi_tensor_adamw
+    exp_avg_sq_sqrt = torch._foreach_sqrt(device_exp_avg_sqs)
+KeyboardInterrupt
