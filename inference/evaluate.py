@@ -40,7 +40,7 @@ def load_model(checkpoint_path, tokenizer, device):
     config     = checkpoint["config"]
 
     print(f"  Trained for {checkpoint['step']:,} steps "
-          f"(epoch {checkpoint['epoch']})")
+          f"(epoch {checkpoint.get('epoch', 'N/A')})")
     print(f"  Val loss at save: {checkpoint.get('val_loss', 'N/A')}")
 
     model = MolecularDiffusionModel(
