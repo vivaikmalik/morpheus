@@ -16,7 +16,9 @@ Usage
         --batch_size 32   \\
         --gen_steps  15   \\
         --beta       0.1  \\
-        --temperature 0.9
+        --temperature 0.9 \\
+        --mw_weight  0.5  \\
+        --run_name   mw_run1
 """
 
 import sys
@@ -27,7 +29,7 @@ import torch
 import torch.nn.functional as F
 from pathlib import Path
 from rdkit import Chem, DataStructs
-from rdkit.Chem import QED, rdMolDescriptors
+from rdkit.Chem import QED, rdMolDescriptors, Descriptors
 import selfies as sf
 
 ROOT = Path(__file__).parent.parent
@@ -150,8 +152,21 @@ def generate_batch_with_log_probs(model, tokenizer, device, batch_size,
 
 
 # =============================================================================
-# REWARD  (unchanged from v1)
+# REWARD
 # =============================================================================
+
+def _mw_score(mw):
+    """
+    1.0 if MW in [250, 450].
+    Linearly decreases to 0.0 at MW=150 (below) and MW=550 (above).
+    """
+    if 250.0 <= mw <= 450.0:
+        return 1.0
+    elif mw < 250.0:
+        return max(0.0, (mw - 150.0) / 100.0)
+    else:  # mw > 450
+        return max(0.0, (550.0 - mw) / 100.0)
+
 
 def _decode_molecule(ids, tokenizer):
     """Strip specials; return (selfies_str, canonical_smiles | None, mol | None)."""
@@ -170,24 +185,27 @@ def _decode_molecule(ids, tokenizer):
     return selfies_str, None, None
 
 
-def compute_rewards(raw_ids_list, tokenizer, diversity_weight):
+def compute_rewards(raw_ids_list, tokenizer, diversity_weight, mw_weight):
     """
-    QED score minus a diversity penalty for each molecule.
+    reward = QED + mw_weight * mw_score - diversity_weight * batch_similarity
 
     Returns
     -------
-    rewards, qed_scores, mean_sims, canonical_smiles
+    rewards, qed_scores, mw_scores, mean_sims, canonical_smiles
     """
-    qed_scores, canonical_smiles, mols = [], [], []
+    qed_scores, mw_scores, canonical_smiles, mols = [], [], [], []
 
     for ids in raw_ids_list:
         _, smi, mol = _decode_molecule(ids, tokenizer)
         canonical_smiles.append(smi)
         if mol is not None:
             qed_scores.append(float(QED.qed(mol)))
+            mw = Descriptors.ExactMolWt(mol)
+            mw_scores.append(_mw_score(mw))
             mols.append(mol)
         else:
             qed_scores.append(0.0)
+            mw_scores.append(0.0)
             mols.append(None)
 
     fps = [
@@ -208,8 +226,11 @@ def compute_rewards(raw_ids_list, tokenizer, diversity_weight):
         ]
         mean_sims.append(float(np.mean(sims)) if sims else 0.0)
 
-    rewards = [q - diversity_weight * s for q, s in zip(qed_scores, mean_sims)]
-    return rewards, qed_scores, mean_sims, canonical_smiles
+    rewards = [
+        q + mw_weight * m - diversity_weight * s
+        for q, m, s in zip(qed_scores, mw_scores, mean_sims)
+    ]
+    return rewards, qed_scores, mw_scores, mean_sims, canonical_smiles
 
 
 # =============================================================================
@@ -243,7 +264,7 @@ def compute_ref_log_probs(ref_model, input_ids, tokenizer, device):
 
 
 # =============================================================================
-# PERIODIC FULL EVALUATION  (unchanged from v1, uses 50-step generate_batch)
+# PERIODIC FULL EVALUATION  (uses 50-step generate_batch)
 # =============================================================================
 
 def full_eval_metrics(model, tokenizer, device, batch_size, model_config, temperature):
@@ -294,6 +315,53 @@ def full_eval_metrics(model, tokenizer, device, batch_size, model_config, temper
 
 
 # =============================================================================
+# SUMMARY PLOT
+# =============================================================================
+
+def save_training_plot(csv_path, run_name, output_dir):
+    """Two-subplot training curve: QED (top) and MW (bottom)."""
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
+
+    df = pd.read_csv(csv_path)
+    steps = df["step"]
+    window = 20
+
+    qed_raw    = df["mean_qed"]
+    mw_raw     = df["mean_mw"]
+    qed_smooth = qed_raw.rolling(window, min_periods=1, center=True).mean()
+    mw_smooth  = mw_raw.rolling(window, min_periods=1, center=True).mean()
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 7), sharex=True)
+    fig.suptitle(f"REINFORCE Training Curves — {run_name}", fontsize=13, fontweight="bold")
+
+    # ── QED ──
+    ax1.plot(steps, qed_raw,    color="#aec6e8", linewidth=0.8, alpha=0.5)
+    ax1.plot(steps, qed_smooth, color="#1f77b4", linewidth=2.0, label="Mean QED (smoothed)")
+    ax1.axhline(0.731, color="gray", linestyle="--", linewidth=1.3, label="Base model (0.731)")
+    ax1.set_ylabel("Mean QED", fontsize=11)
+    ax1.legend(fontsize=9)
+    ax1.grid(True, alpha=0.3)
+
+    # ── MW ──
+    ax2.plot(steps, mw_raw,    color="#b5d4b0", linewidth=0.8, alpha=0.5)
+    ax2.plot(steps, mw_smooth, color="#2ca02c", linewidth=2.0, label="Mean MW (smoothed)")
+    ax2.axhline(338.0, color="gray", linestyle="--", linewidth=1.3, label="Base model (338 Da)")
+    ax2.set_xlabel("RL Step", fontsize=11)
+    ax2.set_ylabel("Mean MW (Da)", fontsize=11)
+    ax2.legend(fontsize=9)
+    ax2.grid(True, alpha=0.3)
+    ax2.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+    fig.tight_layout()
+    out_path = output_dir / f"{run_name}_training_curves.png"
+    fig.savefig(out_path, dpi=150)
+    import matplotlib.pyplot as _plt; _plt.close(fig)
+    print(f"  Summary plot saved → {out_path}")
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
 
@@ -308,11 +376,15 @@ def main():
     parser.add_argument("--lr",               type=float, default=5e-6)
     parser.add_argument("--diversity_weight", type=float, default=0.0,
                         help="Weight on within-batch similarity penalty (0 = pure QED)")
+    parser.add_argument("--mw_weight",        type=float, default=0.0,
+                        help="Weight on MW score (0 = no MW reward)")
     parser.add_argument("--temperature",      type=float, default=0.9)
     parser.add_argument("--gen_steps",        type=int,   default=15,
                         help="MaskGIT denoising steps during RL training (default 15)")
     parser.add_argument("--beta",             type=float, default=0.1,
                         help="KL penalty weight (0 = no regularisation)")
+    parser.add_argument("--run_name",         type=str,   default="default",
+                        help="Name for this run — used in log filename and checkpoints")
     parser.add_argument("--output_dir",       default="outputs/rl")
     args = parser.parse_args()
 
@@ -322,7 +394,7 @@ def main():
     checkpoint_dir  = ROOT / "checkpoints"
     output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_dir.mkdir(exist_ok=True)
-    csv_path = output_dir / "rl_log_v2.csv"
+    csv_path = output_dir / f"rl_log_v2_{args.run_name}.csv"
 
     # ── device ─────────────────────────────────────────────────────────────────
     device = torch.device(
@@ -349,15 +421,15 @@ def main():
     # ── CSV header ─────────────────────────────────────────────────────────────
     with open(csv_path, "w", newline="") as f:
         csv.writer(f).writerow([
-            "step", "mean_qed", "mean_reward", "mean_diversity",
-            "loss", "mean_kl", "validity",
+            "step", "mean_qed", "mean_mw", "mean_reward",
+            "mean_diversity", "loss", "mean_kl", "validity",
         ])
 
     print(
-        f"\nStarting REINFORCE v2\n"
+        f"\nStarting REINFORCE v2  [{args.run_name}]\n"
         f"  steps={args.num_steps}  batch={args.batch_size}  lr={args.lr}\n"
-        f"  diversity_weight={args.diversity_weight}  beta={args.beta}  "
-        f"temperature={args.temperature}  gen_steps={args.gen_steps}\n"
+        f"  diversity_weight={args.diversity_weight}  mw_weight={args.mw_weight}\n"
+        f"  beta={args.beta}  temperature={args.temperature}  gen_steps={args.gen_steps}\n"
     )
 
     # ── training loop ──────────────────────────────────────────────────────────
@@ -373,8 +445,8 @@ def main():
         raw_ids_list = input_ids_t.detach().cpu().tolist()
 
         # 3. Rewards
-        rewards, qed_scores, mean_sims, canonical_smiles = compute_rewards(
-            raw_ids_list, tokenizer, args.diversity_weight
+        rewards, qed_scores, mw_scores, mean_sims, canonical_smiles = compute_rewards(
+            raw_ids_list, tokenizer, args.diversity_weight, args.mw_weight
         )
         rewards_t = torch.tensor(rewards, dtype=torch.float32, device=device)
 
@@ -396,15 +468,25 @@ def main():
 
         # 7. Scalar metrics
         mean_qed       = float(np.mean(qed_scores))
+        mean_mw_score  = float(np.mean(mw_scores))
         mean_reward    = float(np.mean(rewards))
         mean_diversity = float(np.mean([1.0 - s for s in mean_sims]))
         mean_kl        = float(kl_penalty.mean().item())
         validity       = sum(s is not None for s in canonical_smiles) / len(canonical_smiles)
 
+        # Compute actual mean MW in Daltons for logging
+        mw_values = []
+        for ids in raw_ids_list:
+            _, _, mol = _decode_molecule(ids, tokenizer)
+            if mol is not None:
+                mw_values.append(Descriptors.ExactMolWt(mol))
+        mean_mw_da = float(np.mean(mw_values)) if mw_values else 0.0
+
         # 8. Console + CSV logging (every step)
         print(
             f"Step {step:>4}  |  "
             f"QED={mean_qed:.4f}  "
+            f"MW={mean_mw_da:.1f}Da  "
             f"reward={mean_reward:.4f}  "
             f"diversity={mean_diversity:.4f}  "
             f"KL={mean_kl:.4f}  "
@@ -415,6 +497,7 @@ def main():
             csv.writer(f).writerow([
                 step,
                 f"{mean_qed:.4f}",
+                f"{mean_mw_da:.2f}",
                 f"{mean_reward:.4f}",
                 f"{mean_diversity:.4f}",
                 f"{loss.item():.4f}",
@@ -441,7 +524,7 @@ def main():
 
         # 10. Checkpoint every 100 steps
         if step % 100 == 0:
-            ckpt_path = checkpoint_dir / f"rl_v2_step_{step}.pt"
+            ckpt_path = checkpoint_dir / f"rl_v2_{args.run_name}_step_{step}.pt"
             torch.save({
                 "step"     : step,
                 "model"    : model.state_dict(),
@@ -451,6 +534,7 @@ def main():
             print(f"  Checkpoint saved → {ckpt_path.name}")
 
     print(f"\nDone.  Log: {csv_path}")
+    save_training_plot(csv_path, args.run_name, output_dir)
 
 
 if __name__ == "__main__":
