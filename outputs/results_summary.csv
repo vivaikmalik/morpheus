@@ -1,0 +1,6 @@
+model,checkpoint,qed_mean,mw_mean,uniqueness,novelty,diversity,scaffold_div,lipinski,logp_mean,qed_kl,mw_kl,logp_kl
+base_model,best_model.pt,0.731,338,100,100,0.851,0.954,99.4,2.62,0.022,0.787,0.028
+rl_qed_only,rl_v2_step_200.pt,0.790,290,98.8,100,0.847,0.886,99.2,2.68,0.143,1.389,0.155
+rl_qed_mw_15step,rl_v2_qed_mw_step_300.pt,0.800,291,99.2,99.6,0.847,0.952,99.8,2.33,0.167,2.788,0.081
+rl_qed_mw_50step,rl_v2_qed_mw_50steps_step_200.pt,0.820,329,91.2,,,,,2.62,,,
+rl_qed_mw_div_50step,rl_v2_qed_mw_div_50steps_step_200.pt,0.840,315,93.4,,,,,2.70,,,
