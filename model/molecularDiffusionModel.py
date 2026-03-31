@@ -31,16 +31,16 @@ class MolecularDiffusionModel(nn.Module):
         self.uncond_prob  = uncond_prob
 
         # ------------------------------------------------------------------ #
-        # 1. TEXT ENCODER & PROJECTOR (FROZEN)                                 #
+        # TEXT ENCODER & PROJECTOR (FROZEN)                                 #
         # ------------------------------------------------------------------ #
         self.text_encoder = AutoModel.from_pretrained(text_model_name)
-        # Freeze the text encoder to save memory and compute
+        # Freeze the text encoder
         for param in self.text_encoder.parameters():
             param.requires_grad = False
             
         text_hidden_size = self.text_encoder.config.hidden_size
         
-        # MLP Projector to map text hidden states to diffusion hidden size
+        # MLP Projector 
         self.text_proj = nn.Sequential(
             nn.Linear(text_hidden_size, ffn_dim),
             nn.SiLU(),
@@ -51,7 +51,7 @@ class MolecularDiffusionModel(nn.Module):
         self.null_token = nn.Parameter(torch.randn(1, 1, hidden_size))
 
         # ------------------------------------------------------------------ #
-        # 2. DIFFUSION EMBEDDINGS                                              #
+        # DIFFUSION EMBEDDINGS                                              #
         # ------------------------------------------------------------------ #
         self.token_embedding = nn.Embedding(vocab_size, hidden_size, padding_idx=pad_token_id)
         self.pos_embedding = PositionalEmbedding(max_length, hidden_size)
@@ -59,7 +59,7 @@ class MolecularDiffusionModel(nn.Module):
         self.input_norm = nn.LayerNorm(hidden_size)
 
         # ------------------------------------------------------------------ #
-        # 3. TRANSFORMER BLOCKS                                                #
+        # TRANSFORMER BLOCKS                                                #
         # ------------------------------------------------------------------ #
         self.blocks = nn.ModuleList([
             TransformerBlock(hidden_size, num_heads, ffn_dim, dropout)
@@ -73,9 +73,8 @@ class MolecularDiffusionModel(nn.Module):
         self.lm_head.weight = self.token_embedding.weight
 
     def _init_weights(self):
-        for module in self.modules():
-            # Don't re-initialize the frozen text encoder!
-            if module == self.text_encoder:
+        for name, module in self.named_modules():
+            if name.startswith('text_encoder'):
                 continue
             if isinstance(module, nn.Linear):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
@@ -85,6 +84,11 @@ class MolecularDiffusionModel(nn.Module):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
+
+        
+        for block in self.blocks:
+            nn.init.zeros_(block.cross_attention.out_proj.weight)
+            nn.init.zeros_(block.cross_attention.out_proj.bias)
 
     def get_text_embeddings(self, text_input_ids, text_attention_mask):
         """ Runs the frozen text model and projects the embeddings """
@@ -100,7 +104,6 @@ class MolecularDiffusionModel(nn.Module):
         device  = input_ids.device
         B, seq_len = input_ids.shape
 
-        # --- CFG Dropout Logic (Training Only) ---
         if self.training:
             # Drop text conditioning with probability `uncond_prob`
             keep_mask = torch.rand(B, device=device) > self.uncond_prob
@@ -109,10 +112,8 @@ class MolecularDiffusionModel(nn.Module):
             null_seq = self.null_token.expand(B, text_embeds.size(1), -1)
             text_embeds = torch.where(keep_mask, text_embeds, null_seq)
 
-        # --- Selfies padding mask ---
         padding_mask = (input_ids == self.pad_token_id)
 
-        # --- Embeddings ---
         x = self.token_embedding(input_ids)
         pos = self.pos_embedding(seq_len, device)
         x = x + pos
@@ -120,7 +121,6 @@ class MolecularDiffusionModel(nn.Module):
         x = x + t_emb.unsqueeze(1)
         x = self.input_norm(x)
 
-        # --- Transformer blocks ---
         for block in self.blocks:
             x = block(x, text_embeds, padding_mask, text_padding_mask)
 

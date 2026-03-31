@@ -32,11 +32,11 @@ CONFIG = {
     "num_layers"  : 8,
     "max_length"  : 74,
     "dropout"     : 0.1,
-    "text_model"  : "distilbert-base-uncased", # Frozen text encoder
+    "text_model"  : "BAAI/bge-large-en-v1.5",
     "uncond_prob" : 0.1,
 
     "batch_size"           : 256,
-    "learning_rate"        : 2e-4, # Slightly lower for fine-tuning
+    "learning_rate"        : 2e-4, 
     "weight_decay"         : 0.01,
     "max_grad_norm"        : 1.0,
     "num_epochs"           : 10,
@@ -54,7 +54,7 @@ CONFIG = {
     "gen_temperature" : 1.2,   
     "gen_num_mols"    : 4,     
 
-    "data_path"       : "train.csv", # <-- ADD YOUR LOCAL CSV PATH HERE
+    "data_path"       : "train.csv",
 
     "project_root"  : str(Path(__file__).parent.parent),
     "checkpoint_dir": str(Path(__file__).parent.parent / "checkpoints"),
@@ -95,7 +95,7 @@ def run_validation(model, val_loader, device):
     total_steps = 0
 
     with torch.no_grad():
-        # Wrap val_loader with tqdm
+
         for batch in tqdm(val_loader, desc="Validating", leave=False):
             input_ids = batch["input_ids"].to(device)
             labels    = batch["labels"].to(device)
@@ -104,7 +104,7 @@ def run_validation(model, val_loader, device):
             # Text inputs
             text_input_ids = batch["text_input_ids"].to(device)
             text_attention_mask = batch["text_attention_mask"].to(device)
-            # Convert HF attention mask (1=real, 0=pad) to our boolean padding mask (True=pad)
+            # Convert HF attention mask (1=real, 0=pad)
             text_padding_mask = (text_attention_mask == 0)
 
             # Get text embeddings
@@ -155,7 +155,6 @@ def generate_samples(model, tokenizer, hf_tokenizer, device, step, cfg_scale=3.0
         for step_idx, t_val in enumerate(t_vals):
             step_t = t_val.repeat(num_mols).unsqueeze(-1)
             
-            # --- DOUBLE PASS FOR CFG ---
             cond_logits = model(input_ids, step_t, text_embeds, text_padding_mask)
             uncond_logits = model(input_ids, step_t, null_embeds, text_padding_mask)
             
@@ -178,7 +177,6 @@ def generate_samples(model, tokenizer, hf_tokenizer, device, step, cfg_scale=3.0
 
             input_ids = sampled
 
-    # --- Decode ---
     results = []
     for i in range(num_mols):
         ids = input_ids[i].cpu().tolist()
@@ -222,15 +220,14 @@ def train():
     checkpoint_dir = Path(CONFIG["checkpoint_dir"])
     checkpoint_dir.mkdir(exist_ok=True)
 
-    # --- Tokenizers ---
     tokenizer = ChemicalTokenizer(project_root / "chemical_tokenizer.json")
     hf_tokenizer = AutoTokenizer.from_pretrained(CONFIG["text_model"])
 
-    # --- Dataset ---
     print(f"Loading dataset from {CONFIG['data_path']}...")
     df = pd.read_csv(CONFIG["data_path"])
     
-    # Optional: Fill in missing prompts if your CSV doesn't have them yet
+    if "response" not in df.columns:
+        raise ValueError("CSV must have a 'response' column with SELFIES strings.")
     if "prompt" not in df.columns:
         print("WARNING: 'prompt' column not found in CSV. Falling back to default.")
         df["prompt"] = "A chemical molecule"
@@ -246,7 +243,6 @@ def train():
     train_loader = DataLoader(train_dataset, batch_size=CONFIG["batch_size"], shuffle=True, collate_fn=collator)
     val_loader = DataLoader(val_dataset, batch_size=CONFIG["batch_size"], shuffle=False, collate_fn=collator)
 
-    # --- Model ---
     model = MolecularDiffusionModel(
         vocab_size      = CONFIG["vocab_size"],
         hidden_size     = CONFIG["hidden_size"],
@@ -271,9 +267,6 @@ def train():
         print(f"Loading pre-trained weights from {best_model_path}...")
         checkpoint = torch.load(best_model_path, map_location=device)
         
-        # Load weights with strict=False. This successfully loads all the 
-        # original layers and ignores the newly added cross-attention layers, 
-        # which will rely on their zero-initialization.
         missing_keys, unexpected_keys = model.load_state_dict(checkpoint["model"], strict=False)
         
         print(f"Missing keys (expected - new layers): {len(missing_keys)}")
@@ -281,7 +274,6 @@ def train():
     else:
         print("WARNING: best_model.pt not found. Training from scratch.")
 
-    # --- Optimizer (Freshly initialized for fine-tuning) ---
     optimizer = AdamW([p for p in model.parameters() if p.requires_grad],
                       lr=CONFIG["learning_rate"], weight_decay=CONFIG["weight_decay"])
 
@@ -298,7 +290,6 @@ def train():
     for epoch in range(CONFIG["num_epochs"]):
         print(f"\n--- Epoch {epoch + 1}/{CONFIG['num_epochs']} ---")
         
-        # Wrap train_loader with tqdm
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}", leave=True)
 
         for batch in progress_bar:
@@ -306,15 +297,12 @@ def train():
             labels    = batch["labels"].to(device)
             timesteps = batch["timesteps"].to(device)
             
-            # Text Processing
             text_input_ids = batch["text_input_ids"].to(device)
             text_attention_mask = batch["text_attention_mask"].to(device)
             text_padding_mask = (text_attention_mask == 0)
 
-            # 1. Get Text Embeddings from frozen model
             text_embeds = model.get_text_embeddings(text_input_ids, text_attention_mask)
 
-            # 2. Diffusion Forward Pass
             logits = model(input_ids, timesteps, text_embeds, text_padding_mask)
             loss   = diffusion_loss(logits, labels, timesteps)
 
@@ -329,7 +317,6 @@ def train():
 
             if global_step % CONFIG["log_every"] == 0:
                 current_lr = scheduler.get_last_lr()[0]
-                # Update the tqdm progress bar suffix instead of printing a new line
                 progress_bar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{current_lr:.2e}")
                 wandb.log({"train/loss": loss.item(), "train/lr": current_lr}, step=global_step)
 
@@ -348,7 +335,7 @@ def train():
                         "optimizer": optimizer.state_dict(),
                         "config": CONFIG,
                     }, checkpoint_dir / "best_finetuned_model.pt")
-                    print("  ✅ Saved best finetuned model")
+                    print("Saved best finetuned model")
 
     print("Fine-tuning complete.")
     wandb.finish()
