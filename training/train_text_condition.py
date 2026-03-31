@@ -335,13 +335,22 @@ def train():
 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
+                    ckpt_path = checkpoint_dir / "best_finetuned_model.pt"
                     torch.save({
                         "step": global_step,
                         "model": model.state_dict(),
                         "optimizer": optimizer.state_dict(),
                         "config": CONFIG,
-                    }, checkpoint_dir / "best_finetuned_model.pt")
+                    }, ckpt_path)
                     print("Saved best finetuned model")
+
+                    artifact = wandb.Artifact(
+                        name     = f"finetuned-model-valloss{val_loss:.4f}",
+                        type     = "model",
+                        metadata = {"val_loss": val_loss, "step": global_step},
+                    )
+                    artifact.add_file(str(ckpt_path))
+                    wandb.log_artifact(artifact)
 
     print("Fine-tuning complete.")
     wandb.finish()
