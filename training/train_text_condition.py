@@ -280,7 +280,13 @@ def train():
     total_steps  = (train_size // CONFIG["batch_size"]) * CONFIG["num_epochs"]
     scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=CONFIG["warmup_steps"], num_training_steps=total_steps)
 
-    wandb.init(project=CONFIG["wandb_project"], config=CONFIG)
+    run = wandb.init(
+        project  = CONFIG["wandb_project"],
+        config   = CONFIG,
+        reinit   = True,
+        settings = wandb.Settings(start_method="thread"),
+    )
+    print(f"W&B run started: {run.url}")
 
     global_step   = 0
     best_val_loss = float('inf')
