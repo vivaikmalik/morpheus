@@ -48,7 +48,6 @@ CONFIG = {
 
     "log_every"  : 50,
     "val_every"  : 500,
-    "save_every" : 1000,
 
     "gen_steps"       : 32,    
     "gen_temperature" : 1.2,   
@@ -127,18 +126,17 @@ def run_validation(model, val_loader, device):
 def generate_samples(model, tokenizer, hf_tokenizer, device, step, cfg_scale=3.0):
     model.eval()
 
-    num_mols    = CONFIG["gen_num_mols"]
     max_length  = CONFIG["max_length"]
     num_steps   = CONFIG["gen_steps"]
     temperature = CONFIG["gen_temperature"]
 
-    # Test prompts
     prompts = [
         "A highly soluble molecule with a benzene ring.",
         "A small fragment molecule.",
         "A molecule containing fluorine.",
         "A complex organic compound with multiple rings."
     ]
+    num_mols = len(prompts)  # always derived from prompts, not config
     
     # Prepare Text condition
     text_inputs = hf_tokenizer(prompts, padding=True, truncation=True, return_tensors="pt").to(device)
