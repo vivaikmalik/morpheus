@@ -14,7 +14,7 @@ class ConditionalSELFIESDataset(Dataset):
     def __init__(self, df, tokenizer, property_column="logP", max_length=74):
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.selfies_list = df["selfies"].tolist()
+        self.selfies_list = df["response"].tolist()
         self.properties = df[property_column].tolist()
 
     def __len__(self):
