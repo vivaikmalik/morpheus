@@ -31,7 +31,7 @@ CONFIG = {
     "num_layers"  : 8,
     "max_length"  : 74,
     "dropout"     : 0.1,
-    "text_model"  : "distilbert-base-uncased", # Frozen text encoder
+    "text_model"  : "BAAI/bge-large-en-v1.5", # Frozen text encoder
     "uncond_prob" : 0.1,
 
     "batch_size"           : 256,
