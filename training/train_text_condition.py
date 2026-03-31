@@ -55,6 +55,7 @@ CONFIG = {
     "gen_num_mols"    : 4,     
 
     "data_path"       : "train.csv",
+    "val_data_path"   : None,          # optional separate val CSV; if None, splits from train
 
     "project_root"  : str(Path(__file__).parent.parent),
     "checkpoint_dir": str(Path(__file__).parent.parent / "checkpoints"),
@@ -199,7 +200,7 @@ def generate_samples(model, tokenizer, hf_tokenizer, device, step, cfg_scale=3.0
     print(f"\n{'='*60}")
     print(f"  CFG GENERATED MOLECULES — Step {step}")
     for r in results:
-        status = "✅" if r["valid"] else "❌"
+        status = "Valid" if r["valid"] else "Invalid"
         print(f"  [{r['idx']}] {status} Prompt: {r['prompt']}\n      SMILES: {r['smiles']}")
     print(f"{'='*60}\n")
 
@@ -232,11 +233,22 @@ def train():
         print("WARNING: 'prompt' column not found in CSV. Falling back to default.")
         df["prompt"] = "A chemical molecule"
 
-    full_dataset = ConditionalSELFIESDataset(df, tokenizer) # Needs to return 'prompt' now
+    train_dataset = ConditionalSELFIESDataset(df, tokenizer)
 
-    val_size   = int(len(full_dataset) * CONFIG["val_fraction"])
-    train_size = len(full_dataset) - val_size
-    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    if CONFIG["val_data_path"] and os.path.exists(CONFIG["val_data_path"]):
+        val_df = pd.read_csv(CONFIG["val_data_path"])
+        if "response" not in val_df.columns:
+            raise ValueError("val CSV must also have a 'response' column.")
+        if "prompt" not in val_df.columns:
+            val_df["prompt"] = "A chemical molecule"
+        val_dataset = ConditionalSELFIESDataset(val_df, tokenizer)
+        train_size  = len(train_dataset)
+        print(f"Using separate val CSV: {CONFIG['val_data_path']} ({len(val_dataset):,} rows)")
+    else:
+        val_size      = int(len(train_dataset) * CONFIG["val_fraction"])
+        train_size    = len(train_dataset) - val_size
+        train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size])
+        print(f"Random split: {train_size:,} train / {val_size:,} val")
 
     collator = ConditionalDiffusionCollator(tokenizer, hf_tokenizer)
 
