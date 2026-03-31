@@ -136,7 +136,7 @@ def generate_samples(model, tokenizer, hf_tokenizer, device, step, cfg_scale=3.0
         "A molecule containing fluorine.",
         "A complex organic compound with multiple rings."
     ]
-    num_mols = len(prompts)  # always derived from prompts, not config
+    num_mols = len(prompts)
     
     # Prepare Text condition
     text_inputs = hf_tokenizer(prompts, padding=True, truncation=True, return_tensors="pt").to(device)
