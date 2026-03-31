@@ -40,7 +40,7 @@ CONFIG = {
     "weight_decay"         : 0.01,
     "max_grad_norm"        : 1.0,
     "num_epochs"           : 10,
-    "warmup_steps"         : 500,
+    "warmup_ratio"         : 0.06,  # 6% of total steps used for warmup, scales with batch size
 
     "val_fraction" : 0.05,
     "num_workers"  : 0,
@@ -290,8 +290,10 @@ def train():
     optimizer = AdamW([p for p in model.parameters() if p.requires_grad],
                       lr=CONFIG["learning_rate"], weight_decay=CONFIG["weight_decay"])
 
-    total_steps  = (train_size // CONFIG["batch_size"]) * CONFIG["num_epochs"]
-    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=CONFIG["warmup_steps"], num_training_steps=total_steps)
+    total_steps   = (train_size // CONFIG["batch_size"]) * CONFIG["num_epochs"]
+    warmup_steps  = int(total_steps * CONFIG["warmup_ratio"])
+    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
+    print(f"LR schedule: {total_steps} total steps, {warmup_steps} warmup ({CONFIG['warmup_ratio']*100:.0f}%)")
 
     run = wandb.init(
         project  = CONFIG["wandb_project"],
