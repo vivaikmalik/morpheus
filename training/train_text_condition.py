@@ -56,6 +56,7 @@ CONFIG = {
 
     "data_path"       : "train.csv",
     "val_data_path"   : None,          # optional separate val CSV; if None, splits from train
+    "early_stop_patience" : 5,         # stop if val loss doesn't improve for this many val checks
 
     "project_root"  : str(Path(__file__).parent.parent),
     "checkpoint_dir": str(Path(__file__).parent.parent / "checkpoints"),
@@ -300,8 +301,10 @@ def train():
     )
     print(f"W&B run started: {run.url}")
 
-    global_step   = 0
-    best_val_loss = float('inf')
+    global_step      = 0
+    best_val_loss    = float('inf')
+    patience_counter = 0
+    stopped_early    = False
 
     model.train()
 
@@ -346,7 +349,8 @@ def train():
                 generate_samples(model, tokenizer, hf_tokenizer, device, global_step)
 
                 if val_loss < best_val_loss:
-                    best_val_loss = val_loss
+                    best_val_loss    = val_loss
+                    patience_counter = 0
                     ckpt_path = checkpoint_dir / "best_finetuned_model.pt"
                     torch.save({
                         "step": global_step,
@@ -363,8 +367,19 @@ def train():
                     )
                     artifact.add_file(str(ckpt_path))
                     wandb.log_artifact(artifact)
+                else:
+                    patience_counter += 1
+                    print(f"  No improvement ({patience_counter}/{CONFIG['early_stop_patience']})")
+                    if patience_counter >= CONFIG["early_stop_patience"]:
+                        print(f"Early stopping: val loss has not improved for "
+                              f"{CONFIG['early_stop_patience']} consecutive val checks.")
+                        stopped_early = True
+                        break
 
-    print("Fine-tuning complete.")
+        if stopped_early:
+            break
+
+    print("Fine-tuning complete." + (" (early stop)" if stopped_early else ""))
     wandb.finish()
 
 if __name__ == "__main__":
