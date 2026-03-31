@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tokenizer.chemicalTokenizer import ChemicalTokenizer
 from dataExtractor.conditionalSELFIESDataset import ConditionalSELFIESDataset
-from training.diffusionCollator import ConditionalDiffusionCollator
+from training.diffusionCollatorPrompt import ConditionalDiffusionCollator
 from model.molecularDiffusionModel import MolecularDiffusionModel
 
 # =============================================================================
