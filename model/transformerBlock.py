@@ -10,32 +10,22 @@ class SelfAttention(nn.Module):
         self.num_heads   = num_heads
         self.head_dim    = hidden_size // num_heads  # 512 // 8 = 64
 
-        # These three linear layers create the Q, K, V matrices
         self.q_proj = nn.Linear(hidden_size, hidden_size)
         self.k_proj = nn.Linear(hidden_size, hidden_size)
         self.v_proj = nn.Linear(hidden_size, hidden_size)
 
-        # Final projection after attention
         self.out_proj = nn.Linear(hidden_size, hidden_size)
 
         self.dropout = nn.Dropout(dropout)
-        self.scale   = math.sqrt(self.head_dim)  # scaling factor
+        self.scale   = math.sqrt(self.head_dim)
 
     def forward(self, x, padding_mask=None):
-        """
-        x:            (B, seq_len, hidden_size)
-        padding_mask: (B, seq_len) True where PAD tokens are
-        returns:      (B, seq_len, hidden_size)
-        """
         B, seq_len, _ = x.shape
 
-        # --- 1. Project input into Q, K, V ---
-        Q = self.q_proj(x)  # (B, seq_len, hidden_size)
-        K = self.k_proj(x)  # (B, seq_len, hidden_size)
-        V = self.v_proj(x)  # (B, seq_len, hidden_size)
+        Q = self.q_proj(x)
+        K = self.k_proj(x)
+        V = self.v_proj(x)
 
-        # --- 2. Split into multiple heads ---
-        # Reshape to (B, num_heads, seq_len, head_dim)
         Q = Q.view(B, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         K = K.view(B, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         V = V.view(B, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
@@ -43,7 +33,7 @@ class SelfAttention(nn.Module):
         attn_mask = None
         if padding_mask is not None:
             attn_mask = torch.zeros((B, 1, 1, seq_len), dtype=x.dtype, device=x.device)
-            mask_bool = padding_mask.unsqueeze(1).unsqueeze(2) # (B, 1, 1, seq_len)
+            mask_bool = padding_mask.unsqueeze(1).unsqueeze(2)
             attn_mask = attn_mask.masked_fill(mask_bool, float('-inf'))
 
         attended = F.scaled_dot_product_attention(
@@ -52,26 +42,74 @@ class SelfAttention(nn.Module):
             dropout_p=self.dropout.p if self.training else 0.0
         )
 
-        # --- 7. Merge heads back together ---
-        attended = attended.transpose(1, 2).contiguous()  # (B, seq_len, num_heads, head_dim)
-        attended = attended.view(B, seq_len, self.hidden_size)  # (B, seq_len, hidden_size)
+        attended = attended.transpose(1, 2).contiguous()
+        attended = attended.view(B, seq_len, self.hidden_size)
 
-        # --- 8. Final projection ---
-        return self.out_proj(attended)  # (B, seq_len, hidden_size)
+        return self.out_proj(attended)
+
+
+class CrossAttention(nn.Module):
+    def __init__(self, hidden_size, num_heads, dropout=0.1):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_heads   = num_heads
+        self.head_dim    = hidden_size // num_heads
+
+        # Q from SELFIES, K & V from Text Embeddings
+        self.q_proj = nn.Linear(hidden_size, hidden_size)
+        self.k_proj = nn.Linear(hidden_size, hidden_size)
+        self.v_proj = nn.Linear(hidden_size, hidden_size)
+
+        self.out_proj = nn.Linear(hidden_size, hidden_size)
+        
+        # Critical to preserve the unconditional pre-training
+        nn.init.zeros_(self.out_proj.weight)
+        nn.init.zeros_(self.out_proj.bias)
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, text_embeds, text_padding_mask=None):
+        B, seq_len, _ = x.shape
+        _, text_len, _ = text_embeds.shape
+
+        Q = self.q_proj(x)
+        K = self.k_proj(text_embeds)
+        V = self.v_proj(text_embeds)
+
+        Q = Q.view(B, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        K = K.view(B, text_len, self.num_heads, self.head_dim).transpose(1, 2)
+        V = V.view(B, text_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attn_mask = None
+        if text_padding_mask is not None:
+            attn_mask = torch.zeros((B, 1, 1, text_len), dtype=x.dtype, device=x.device)
+            mask_bool = text_padding_mask.unsqueeze(1).unsqueeze(2)
+            attn_mask = attn_mask.masked_fill(mask_bool, float('-inf'))
+
+        attended = F.scaled_dot_product_attention(
+            Q, K, V,
+            attn_mask=attn_mask,
+            dropout_p=self.dropout.p if self.training else 0.0
+        )
+
+        attended = attended.transpose(1, 2).contiguous()
+        attended = attended.view(B, seq_len, self.hidden_size)
+
+        return self.out_proj(attended)
 
 
 class FeedForward(nn.Module):
     def __init__(self, hidden_size, ffn_dim, dropout=0.1):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(hidden_size, ffn_dim),  # expand: 512 → 2048
+            nn.Linear(hidden_size, ffn_dim),
             nn.SiLU(),
-            nn.Linear(ffn_dim, hidden_size),  # contract: 2048 → 512
+            nn.Linear(ffn_dim, hidden_size),
             nn.Dropout(dropout)
         )
 
     def forward(self, x):
-        return self.net(x)  # (B, seq_len, hidden_size)
+        return self.net(x)
 
 
 class TransformerBlock(nn.Module):
@@ -81,28 +119,33 @@ class TransformerBlock(nn.Module):
         self.norm1     = nn.LayerNorm(hidden_size)
         self.attention = SelfAttention(hidden_size, num_heads, dropout)
 
+        self.norm_cross = nn.LayerNorm(hidden_size)
+        self.cross_attention = CrossAttention(hidden_size, num_heads, dropout)
+
         self.norm2 = nn.LayerNorm(hidden_size)
         self.ffn   = FeedForward(hidden_size, ffn_dim, dropout)
 
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, padding_mask=None):
-        """
-        x:            (B, seq_len, hidden_size)
-        padding_mask: (B, seq_len) True where PAD tokens are
-        returns:      (B, seq_len, hidden_size)
-        """
-        # --- Attention with residual ---
+    def forward(self, x, text_embeds, padding_mask=None, text_padding_mask=None):
+        # --- Self-Attention ---
         residual = x
-        x = self.norm1(x)                        # normalize first
-        x = self.attention(x, padding_mask)      # attend
+        x = self.norm1(x)
+        x = self.attention(x, padding_mask)
         x = self.dropout(x)
-        x = residual + x                         # add residual
+        x = residual + x
 
-        # --- FFN with residual ---
+        # --- Cross-Attention (NEW) ---
         residual = x
-        x = self.norm2(x)                        # normalize first
-        x = self.ffn(x)                          # transform
-        x = residual + x                         # add residual
+        x = self.norm_cross(x)
+        x = self.cross_attention(x, text_embeds, text_padding_mask)
+        x = self.dropout(x)
+        x = residual + x
+
+        # --- FFN ---
+        residual = x
+        x = self.norm2(x)
+        x = self.ffn(x)
+        x = residual + x
 
         return x
