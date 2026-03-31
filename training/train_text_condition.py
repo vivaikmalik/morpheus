@@ -53,8 +53,8 @@ CONFIG = {
     "gen_temperature" : 1.2,   
     "gen_num_mols"    : 4,     
 
-    "project_root"  : str(Path(__file__).parent),
-    "checkpoint_dir": str(Path(__file__).parent / "checkpoints"),
+    "project_root"  : str(Path(__file__).parent.parent),
+    "checkpoint_dir": str(Path(__file__).parent.parent / "checkpoints"),
     "wandb_project" : "morpheus-diffusion-finetune",
 }
 
@@ -332,7 +332,7 @@ def train():
                         "optimizer": optimizer.state_dict(),
                         "config": CONFIG,
                     }, checkpoint_dir / "best_finetuned_model.pt")
-                    print("  ✅ Saved best finetuned model")
+                    print("Saved best finetuned model")
 
     print("Fine-tuning complete.")
     wandb.finish()
