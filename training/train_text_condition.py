@@ -12,12 +12,13 @@ from torch.utils.data import DataLoader, random_split
 from torch.optim import AdamW
 from transformers import get_cosine_schedule_with_warmup, AutoTokenizer
 import wandb
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tokenizer.chemicalTokenizer import ChemicalTokenizer
 from dataExtractor.conditionalSELFIESDataset import ConditionalSELFIESDataset
-from training.diffusionCollatorPrompt import ConditionalDiffusionCollator
+from training.diffusionCollator import ConditionalDiffusionCollator
 from model.molecularDiffusionModel import MolecularDiffusionModel
 
 # =============================================================================
@@ -31,7 +32,7 @@ CONFIG = {
     "num_layers"  : 8,
     "max_length"  : 74,
     "dropout"     : 0.1,
-    "text_model"  : "BAAI/bge-large-en-v1.5", # Frozen text encoder
+    "text_model"  : "distilbert-base-uncased", # Frozen text encoder
     "uncond_prob" : 0.1,
 
     "batch_size"           : 256,
@@ -52,6 +53,8 @@ CONFIG = {
     "gen_steps"       : 32,    
     "gen_temperature" : 1.2,   
     "gen_num_mols"    : 4,     
+
+    "data_path"       : "train.csv", # <-- ADD YOUR LOCAL CSV PATH HERE
 
     "project_root"  : str(Path(__file__).parent.parent),
     "checkpoint_dir": str(Path(__file__).parent.parent / "checkpoints"),
@@ -92,7 +95,8 @@ def run_validation(model, val_loader, device):
     total_steps = 0
 
     with torch.no_grad():
-        for batch in val_loader:
+        # Wrap val_loader with tqdm
+        for batch in tqdm(val_loader, desc="Validating", leave=False):
             input_ids = batch["input_ids"].to(device)
             labels    = batch["labels"].to(device)
             timesteps = batch["timesteps"].to(device)
@@ -197,7 +201,7 @@ def generate_samples(model, tokenizer, hf_tokenizer, device, step, cfg_scale=3.0
     print(f"\n{'='*60}")
     print(f"  CFG GENERATED MOLECULES — Step {step}")
     for r in results:
-        status = "Valid" if r["valid"] else "Not Valid"
+        status = "✅" if r["valid"] else "❌"
         print(f"  [{r['idx']}] {status} Prompt: {r['prompt']}\n      SMILES: {r['smiles']}")
     print(f"{'='*60}\n")
 
@@ -223,7 +227,14 @@ def train():
     hf_tokenizer = AutoTokenizer.from_pretrained(CONFIG["text_model"])
 
     # --- Dataset ---
-    df = pd.read_csv("hf://datasets/edmanft/zinc250k/zinc250k_selfies.csv")
+    print(f"Loading dataset from {CONFIG['data_path']}...")
+    df = pd.read_csv(CONFIG["data_path"])
+    
+    # Optional: Fill in missing prompts if your CSV doesn't have them yet
+    if "prompt" not in df.columns:
+        print("WARNING: 'prompt' column not found in CSV. Falling back to default.")
+        df["prompt"] = "A chemical molecule"
+
     full_dataset = ConditionalSELFIESDataset(df, tokenizer) # Needs to return 'prompt' now
 
     val_size   = int(len(full_dataset) * CONFIG["val_fraction"])
@@ -286,8 +297,11 @@ def train():
 
     for epoch in range(CONFIG["num_epochs"]):
         print(f"\n--- Epoch {epoch + 1}/{CONFIG['num_epochs']} ---")
+        
+        # Wrap train_loader with tqdm
+        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}", leave=True)
 
-        for batch in train_loader:
+        for batch in progress_bar:
             input_ids = batch["input_ids"].to(device)
             labels    = batch["labels"].to(device)
             timesteps = batch["timesteps"].to(device)
@@ -314,8 +328,10 @@ def train():
             global_step += 1
 
             if global_step % CONFIG["log_every"] == 0:
-                print(f"Step {global_step:>6} | loss: {loss.item():.4f} | grad: {grad_norm:.4f} | lr: {scheduler.get_last_lr()[0]:.2e}")
-                wandb.log({"train/loss": loss.item(), "train/lr": scheduler.get_last_lr()[0]}, step=global_step)
+                current_lr = scheduler.get_last_lr()[0]
+                # Update the tqdm progress bar suffix instead of printing a new line
+                progress_bar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{current_lr:.2e}")
+                wandb.log({"train/loss": loss.item(), "train/lr": current_lr}, step=global_step)
 
             if global_step % CONFIG["val_every"] == 0:
                 val_loss = run_validation(model, val_loader, device)
@@ -332,7 +348,7 @@ def train():
                         "optimizer": optimizer.state_dict(),
                         "config": CONFIG,
                     }, checkpoint_dir / "best_finetuned_model.pt")
-                    print("Saved best finetuned model")
+                    print("  ✅ Saved best finetuned model")
 
     print("Fine-tuning complete.")
     wandb.finish()
