@@ -91,12 +91,14 @@ class MolecularDiffusionModel(nn.Module):
             nn.init.zeros_(block.cross_attention.out_proj.bias)
 
     def get_text_embeddings(self, text_input_ids, text_attention_mask):
-        """ Runs the frozen text model and projects the embeddings """
-        with torch.no_grad():
+        """ Runs the text encoder and projects the embeddings.
+        Gradients flow through the encoder only when it has trainable parameters. """
+        encoder_frozen = not any(p.requires_grad for p in self.text_encoder.parameters())
+        ctx = torch.no_grad() if encoder_frozen else torch.enable_grad()
+        with ctx:
             outputs = self.text_encoder(input_ids=text_input_ids, attention_mask=text_attention_mask)
-            # Get the sequence of hidden states from the last layer
-            hidden_states = outputs.last_hidden_state 
-            
+            hidden_states = outputs.last_hidden_state
+
         # Pass through the learnable projector
         return self.text_proj(hidden_states)
 
