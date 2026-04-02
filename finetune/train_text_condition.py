@@ -90,7 +90,7 @@ def _load_contrastive_text_encoder(config, device):
             "Set CONFIG['contrastive_ckpt_path'] or CONFIG['contrastive_artifact']."
         )
 
-    ckpt = torch.load(ckpt_path, map_location="cpu")
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     text_state = {
         k[len("text_model."):]: v
         for k, v in ckpt["model_state"].items()
@@ -309,7 +309,7 @@ def train():
     best_model_path = os.path.join(checkpoint_dir, "best_model.pt")
     if os.path.exists(best_model_path):
         print(f"Loading pre-trained weights from {best_model_path}...")
-        checkpoint = torch.load(best_model_path, map_location=device)
+        checkpoint = torch.load(best_model_path, map_location=device, weights_only=False)
         
         missing_keys, unexpected_keys = model.load_state_dict(checkpoint["model"], strict=False)
         
