@@ -102,9 +102,12 @@ class MolecularDiffusionModel(nn.Module):
         # Pass through the learnable projector
         return self.text_proj(hidden_states)
 
-    def forward(self, input_ids, timesteps, text_embeds, text_padding_mask=None):
+    def forward(self, input_ids, timesteps, text_embeds=None, text_padding_mask=None):
         device  = input_ids.device
         B, seq_len = input_ids.shape
+
+        if text_embeds is None:
+            text_embeds = self.null_token.expand(B, 1, -1)
 
         if self.training:
             # Drop text conditioning with probability `uncond_prob`
