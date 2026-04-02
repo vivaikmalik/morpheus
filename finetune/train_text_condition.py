@@ -10,8 +10,9 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors
 from torch.utils.data import DataLoader, random_split
 from torch.optim import AdamW
-from transformers import get_cosine_schedule_with_warmup, AutoTokenizer
+from transformers import get_cosine_schedule_with_warmup, AutoTokenizer, AutoModel
 import wandb
+import glob as _glob
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -40,7 +41,7 @@ CONFIG = {
     "weight_decay"         : 0.01,
     "max_grad_norm"        : 1.0,
     "num_epochs"           : 10,
-    "warmup_ratio"         : 0.06,  # 6% of total steps used for warmup, scales with batch size
+    "warmup_ratio"         : 0.06,  
 
     "val_fraction" : 0.05,
     "num_workers"  : 0,
@@ -54,17 +55,57 @@ CONFIG = {
     "gen_num_mols"    : 4,     
 
     "data_path"       : "train.csv",
-    "val_data_path"   : None,          # optional separate val CSV; if None, splits from train
-    "early_stop_patience" : 5,         # stop if val loss doesn't improve for this many val checks
+    "val_data_path"   : None,          
+    "early_stop_patience" : 5,         
 
     "project_root"  : str(Path(__file__).parent.parent),
     "checkpoint_dir": str(Path(__file__).parent.parent / "checkpoints"),
     "wandb_project" : "morpheus-diffusion-finetune",
+    "contrastive_ckpt_path" : None,   # local path to contrastive_text_selfies.pt
+    "contrastive_artifact"  : None,   # W&B artifact
+
+    "freeze_text_encoder"   : True,
 }
 
-# =============================================================================
+# CONTRASTIVE TEXT ENCODER LOADER
+def _load_contrastive_text_encoder(config, device):
+    """Extract the fine-tuned text_model from a ContrastiveAligner checkpoint."""
+    ckpt_path = config.get("contrastive_ckpt_path")
+    artifact  = config.get("contrastive_artifact")
+
+    if ckpt_path and os.path.exists(ckpt_path):
+        print(f"Loading contrastive text encoder from: {ckpt_path}")
+    elif artifact:
+        print(f"Downloading contrastive artifact: {artifact}")
+        _run = wandb.init(project="morpheus-contrastive-load", job_type="load", resume="allow")
+        _art = _run.use_artifact(artifact, type="model")
+        _dir = _art.download(root=os.path.join(config["project_root"], "wandb_contrastive"))
+        _pts = _glob.glob(os.path.join(_dir, "**", "*.pt"), recursive=True)
+        assert _pts, f"No .pt file found in artifact at {_dir}"
+        ckpt_path = sorted(_pts)[0]
+        _run.finish()
+        print(f"Artifact downloaded → {ckpt_path}")
+    else:
+        raise ValueError(
+            "Set CONFIG['contrastive_ckpt_path'] or CONFIG['contrastive_artifact']."
+        )
+
+    ckpt = torch.load(ckpt_path, map_location="cpu")
+    text_state = {
+        k[len("text_model."):]: v
+        for k, v in ckpt["model_state"].items()
+        if k.startswith("text_model.")
+    }
+    assert text_state, "No 'text_model.*' keys in contrastive checkpoint."
+
+    encoder = AutoModel.from_pretrained(config["text_model"])
+    encoder.load_state_dict(text_state, strict=True)
+    print(f"Contrastive text encoder loaded (epoch={ckpt.get('epoch','?')}, "
+          f"best_val_loss={ckpt.get('best_val_loss', float('nan')):.4f})")
+    return encoder.to(device)
+
+
 # LOSS FUNCTION
-# =============================================================================
 def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
     B, seq_len, vocab_size = logits.shape
     device = logits.device
@@ -87,9 +128,7 @@ def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
     loss = (raw_loss * weights * valid).sum() / (weights * valid).sum().clamp(min=1e-8)
     return loss
 
-# =============================================================================
 # VALIDATION
-# =============================================================================
 def run_validation(model, val_loader, device):
     model.eval()
     total_loss  = 0.0
@@ -120,9 +159,7 @@ def run_validation(model, val_loader, device):
     model.train()
     return total_loss / total_steps
 
-# =============================================================================
 # GENERATION (CFG)
-# =============================================================================
 def generate_samples(model, tokenizer, hf_tokenizer, device, step, cfg_scale=3.0):
     model.eval()
 
@@ -205,9 +242,7 @@ def generate_samples(model, tokenizer, hf_tokenizer, device, step, cfg_scale=3.0
 
     model.train()
 
-# =============================================================================
 # TRAINING LOOP
-# =============================================================================
 def train():
     random.seed(CONFIG["seed"])
     np.random.seed(CONFIG["seed"])
@@ -270,9 +305,7 @@ def train():
     total, trainable = model.count_parameters()
     print(f"Parameters: {total:,} total | {trainable:,} trainable (Text encoder is frozen)")
 
-    # ==========================================================
     # LOAD BEST PRE-TRAINED MODEL
-    # ==========================================================
     best_model_path = os.path.join(checkpoint_dir, "best_model.pt")
     if os.path.exists(best_model_path):
         print(f"Loading pre-trained weights from {best_model_path}...")
@@ -284,6 +317,14 @@ def train():
         print(f"Unexpected keys: {len(unexpected_keys)}")
     else:
         print("WARNING: best_model.pt not found. Training from scratch.")
+
+    if CONFIG.get("contrastive_ckpt_path") or CONFIG.get("contrastive_artifact"):
+        model.text_encoder = _load_contrastive_text_encoder(CONFIG, device)
+
+    frozen = CONFIG.get("freeze_text_encoder", True)
+    for p in model.text_encoder.parameters():
+        p.requires_grad = not frozen
+    print(f"Text encoder {'frozen' if frozen else 'unfrozen (trainable)'}.")
 
     optimizer = AdamW([p for p in model.parameters() if p.requires_grad],
                       lr=CONFIG["learning_rate"], weight_decay=CONFIG["weight_decay"])
