@@ -60,7 +60,8 @@ CONFIG = {
 
     "project_root"  : str(Path(__file__).parent.parent),
     "checkpoint_dir": str(Path(__file__).parent.parent / "checkpoints"),
-    "wandb_project" : "morpheus-diffusion-finetune",
+    "wandb_project"  : "morpheus-diffusion-finetune",
+    "wandb_run_name" : None,   # set from notebook, e.g. "contrastive-enc-lr2e4"
     "contrastive_ckpt_path" : None,   # local path to contrastive_text_selfies.pt
     "contrastive_artifact"  : None,   # W&B artifact
 
@@ -336,6 +337,7 @@ def train():
 
     run = wandb.init(
         project  = CONFIG["wandb_project"],
+        name     = CONFIG.get("wandb_run_name"),
         config   = CONFIG,
         reinit   = True,
         settings = wandb.Settings(start_method="thread"),
