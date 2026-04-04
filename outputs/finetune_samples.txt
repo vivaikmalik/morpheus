@@ -1,0 +1,41 @@
+CFG GENERATION SAMPLES — Stage 2 Fine-tuning
+cfg_scale=3.0  temperature=1.2  steps=32
+Valid: 8/8
+======================================================================
+
+PROMPT: A drug-like molecule with high QED score and good oral bioavailability.
+----------------------------------------------------------------------
+  [1] VALID
+       SMILES : CC[N+]=NC1C=Cc2ncccccnc3c(nccc23)N2CCN(CC2)c2ccc(cc2)C2=CCC(CC2)C([N-]C)=CN=NN=C=N1
+       MW     : 639.8  QED: 0.279
+  [2] VALID
+       SMILES : CNCC=Cc1ccc(N2C=COCC2)cc1C=CCc1cc(C2=N[C@H]3NNCc4ccc2cc43)ccc1O
+       MW     : 519.6  QED: 0.347
+
+PROMPT: A small fragment molecule with molecular weight below 250 Da.
+----------------------------------------------------------------------
+  [1] VALID
+       SMILES : C=CSPCC[C@@H](OC=O)C(C)=O
+       MW     : 220.2  QED: 0.356
+  [2] VALID
+       SMILES : CCC(=O)[NH+]=NN[P@](C)C=C[SH]1CCC1
+       MW     : 248.3  QED: 0.292
+
+PROMPT: A molecule containing fluorine with aromatic rings.
+----------------------------------------------------------------------
+  [1] VALID
+       SMILES : CCCF
+       MW     : 62.1  QED: 0.43
+  [2] VALID
+       SMILES : FF
+       MW     : 38.0  QED: 0.374
+
+PROMPT: A complex molecule with multiple fused rings and nitrogen atoms.
+----------------------------------------------------------------------
+  [1] VALID
+       SMILES : CC1C=CPC1=[N+]=[N+]CN1C2[NH+][N+]2C(C)CCN1C
+       MW     : 281.3  QED: 0.228
+  [2] VALID
+       SMILES : C=CC=CN(C)C
+       MW     : 97.2  QED: 0.469
+

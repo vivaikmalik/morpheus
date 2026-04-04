@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 wandb/
 *.pt
+checkpoints/*.pt
+wandb/
+__pycache__/
+*.pyc
+data/raw/

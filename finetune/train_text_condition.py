@@ -1,5 +1,7 @@
+import csv
 import sys
 import os
+import time
 import torch
 import random
 import numpy as np
@@ -14,6 +16,9 @@ from transformers import get_cosine_schedule_with_warmup, AutoTokenizer, AutoMod
 import wandb
 import glob as _glob
 from tqdm import tqdm
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -27,20 +32,20 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 # =============================================================================
 CONFIG = {
     "vocab_size"  : 110,
-    "hidden_size" : 256,
+    "hidden_size" : 512,
     "num_heads"   : 8,
-    "ffn_dim"     : 512,
+    "ffn_dim"     : 1024,
     "num_layers"  : 8,
     "max_length"  : 74,
     "dropout"     : 0.1,
     "text_model"  : "BAAI/bge-large-en-v1.5",
     "uncond_prob" : 0.1,
 
-    "batch_size"           : 256,
+    "batch_size"           : 32,
     "learning_rate"        : 2e-4, 
     "weight_decay"         : 0.01,
     "max_grad_norm"        : 1.0,
-    "num_epochs"           : 10,
+    "num_epochs"           : 5,
     "warmup_ratio"         : 0.06,  
 
     "val_fraction" : 0.05,
@@ -48,18 +53,21 @@ CONFIG = {
     "seed"         : 42,
 
     "log_every"  : 50,
-    "val_every"  : 500,
+    "val_every"      : 1500,
+    "val_max_batches": 200,
 
     "gen_steps"       : 32,    
     "gen_temperature" : 1.2,   
     "gen_num_mols"    : 4,     
 
-    "data_path"       : "train.csv",
-    "val_data_path"   : None,          
+    "data_path"       : "data/train.csv",
+    "val_data_path"   : "data/val.csv",
     "early_stop_patience" : 5,         
 
     "project_root"  : str(Path(__file__).parent.parent),
     "checkpoint_dir": str(Path(__file__).parent.parent / "checkpoints"),
+    "log_path"      : str(Path(__file__).parent.parent / "outputs" / "finetune_log.csv"),
+    "plot_dir"      : str(Path(__file__).parent.parent / "outputs" / "plots" / "finetune"),
     "wandb_project" : "morpheus-diffusion-finetune",
     "contrastive_ckpt_path" : None,   # local path to contrastive_text_selfies.pt
     "contrastive_artifact"  : None,   # W&B artifact
@@ -136,7 +144,8 @@ def run_validation(model, val_loader, device):
 
     with torch.no_grad():
 
-        for batch in tqdm(val_loader, desc="Validating", leave=False):
+        for batch in tqdm(val_loader, desc="Validating", leave=False,
+                          total=min(CONFIG["val_max_batches"], len(val_loader))):
             input_ids = batch["input_ids"].to(device)
             labels    = batch["labels"].to(device)
             timesteps = batch["timesteps"].to(device)
@@ -155,6 +164,8 @@ def run_validation(model, val_loader, device):
 
             total_loss  += loss.item()
             total_steps += 1
+            if total_steps >= CONFIG["val_max_batches"]:
+                break
 
     model.train()
     return total_loss / total_steps
@@ -242,13 +253,185 @@ def generate_samples(model, tokenizer, hf_tokenizer, device, step, cfg_scale=3.0
 
     model.train()
 
+# CFG QUALITATIVE EVALUATION
+def save_cfg_samples(model, tokenizer, hf_tokenizer, device, out_path: str,
+                     cfg_scale=3.0, num_steps=32, temperature=1.2):
+    """
+    Generate 2 molecules for each of 4 diverse prompts using CFG sampling.
+    Save prompts + SMILES + validity to a plain-text file for qualitative review.
+    """
+    model.eval()
+    max_length = CONFIG["max_length"]
+
+    prompts = [
+        "A drug-like molecule with high QED score and good oral bioavailability.",
+        "A drug-like molecule with high QED score and good oral bioavailability.",
+        "A small fragment molecule with molecular weight below 250 Da.",
+        "A small fragment molecule with molecular weight below 250 Da.",
+        "A molecule containing fluorine with aromatic rings.",
+        "A molecule containing fluorine with aromatic rings.",
+        "A complex molecule with multiple fused rings and nitrogen atoms.",
+        "A complex molecule with multiple fused rings and nitrogen atoms.",
+    ]
+    num_mols = len(prompts)
+
+    text_inputs = hf_tokenizer(
+        prompts, padding=True, truncation=True, max_length=128, return_tensors="pt"
+    ).to(device)
+    text_padding_mask = (text_inputs["attention_mask"] == 0)
+
+    input_ids = torch.full((num_mols, max_length), tokenizer.mask_token_id, device=device)
+    t_vals    = torch.linspace(1.0, 0.0, num_steps, device=device)
+
+    with torch.no_grad():
+        text_embeds = model.get_text_embeddings(
+            text_inputs["input_ids"], text_inputs["attention_mask"]
+        )
+        null_embeds = model.null_token.expand(num_mols, text_embeds.size(1), -1)
+
+        for step_idx, t_val in enumerate(t_vals):
+            step_t        = t_val.repeat(num_mols).unsqueeze(-1)
+            cond_logits   = model(input_ids, step_t, text_embeds,  text_padding_mask)
+            uncond_logits = model(input_ids, step_t, null_embeds,  text_padding_mask)
+            logits        = uncond_logits + cfg_scale * (cond_logits - uncond_logits)
+
+            if step_idx < num_steps - 1:
+                logits[:, :, tokenizer.mask_token_id] = float("-inf")
+
+            probs      = torch.softmax(logits / temperature, dim=-1)
+            sampled    = torch.distributions.Categorical(probs=probs).sample()
+            confidence = torch.gather(probs, 2, sampled.unsqueeze(-1)).squeeze(-1)
+
+            alpha_t     = (torch.cos(t_val * torch.pi / 2) ** 2).item()
+            num_to_mask = int((1.0 - alpha_t) * max_length)
+            if num_to_mask > 0 and step_idx < num_steps - 1:
+                _, mask_indices = torch.topk(confidence, num_to_mask, dim=-1, largest=False)
+                sampled.scatter_(1, mask_indices, tokenizer.mask_token_id)
+            input_ids = sampled
+
+    results = []
+    for i in range(num_mols):
+        ids = input_ids[i].cpu().tolist()
+        if tokenizer.eos_token_id in ids:
+            ids = ids[:ids.index(tokenizer.eos_token_id)]
+        selfies_str = tokenizer.decode(ids)
+        entry = {"prompt": prompts[i], "selfies": selfies_str,
+                 "valid": False, "smiles": "", "mw": None, "qed": None}
+        try:
+            import selfies as sf
+            from rdkit.Chem import Descriptors, QED
+            smiles = sf.decoder(selfies_str)
+            mol    = Chem.MolFromSmiles(smiles)
+            if mol is not None:
+                entry["valid"] = True
+                entry["smiles"] = Chem.MolToSmiles(mol)
+                entry["mw"]    = round(Descriptors.MolWt(mol), 1)
+                entry["qed"]   = round(QED.qed(mol), 3)
+        except Exception:
+            pass
+        results.append(entry)
+
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    unique_prompts = list(dict.fromkeys(prompts))  # ordered dedup
+    valid_count    = sum(r["valid"] for r in results)
+
+    with open(out_path, "w") as f:
+        f.write("CFG GENERATION SAMPLES — Stage 2 Fine-tuning\n")
+        f.write(f"cfg_scale={cfg_scale}  temperature={temperature}  steps={num_steps}\n")
+        f.write(f"Valid: {valid_count}/{num_mols}\n")
+        f.write("=" * 70 + "\n\n")
+
+        for prompt in unique_prompts:
+            f.write(f"PROMPT: {prompt}\n")
+            f.write("-" * 70 + "\n")
+            pair = [r for r in results if r["prompt"] == prompt]
+            for j, r in enumerate(pair):
+                status = "VALID" if r["valid"] else "INVALID"
+                f.write(f"  [{j+1}] {status}\n")
+                if r["valid"]:
+                    f.write(f"       SMILES : {r['smiles']}\n")
+                    f.write(f"       MW     : {r['mw']}  QED: {r['qed']}\n")
+                else:
+                    f.write(f"       SELFIES: {r['selfies'][:80]}\n")
+            f.write("\n")
+
+    # Also print to stdout
+    print(f"\n{'='*70}")
+    print("CFG GENERATION SAMPLES")
+    print(f"Valid: {valid_count}/{num_mols}")
+    print(f"{'='*70}")
+    for prompt in unique_prompts:
+        print(f"\nPROMPT: {prompt}")
+        for r in [r for r in results if r["prompt"] == prompt]:
+            if r["valid"]:
+                print(f"  ✓ {r['smiles'][:65]}  MW={r['mw']} QED={r['qed']}")
+            else:
+                print(f"  ✗ {r['selfies'][:65]}")
+    print(f"\nSaved → {out_path}")
+
+    model.train()
+
+
+# PLOTS
+def save_plots(log_path: str, plot_dir: str):
+    plot_dir = Path(plot_dir)
+    plot_dir.mkdir(parents=True, exist_ok=True)
+
+    df = pd.read_csv(log_path)
+    if df.empty:
+        print("[plot] Log file is empty, skipping plots.")
+        return
+
+    train_rows = df[df["train_loss"].notna()].copy()
+    val_rows   = df[df["val_loss"].notna()].copy()
+
+    style = {"linewidth": 1.5, "alpha": 0.9}
+    dpi   = 300
+
+    # Loss curves
+    fig, ax = plt.subplots(figsize=(9, 5))
+    if not train_rows.empty:
+        ax.plot(train_rows["step"], train_rows["train_loss"],
+                label="Train loss", color="#2196F3", **style)
+    if not val_rows.empty:
+        ax.plot(val_rows["step"], val_rows["val_loss"],
+                label="Val loss", color="#F44336", linestyle="--", **style)
+    ax.set_xlabel("Step")
+    ax.set_ylabel("Loss")
+    ax.set_title("Fine-tuning Loss (27M model, Mol-Instructions)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(plot_dir / "loss_curves.png", dpi=dpi)
+    plt.close(fig)
+
+    # LR schedule
+    if not train_rows.empty and "lr" in train_rows.columns:
+        fig, ax = plt.subplots(figsize=(9, 4))
+        ax.plot(train_rows["step"], train_rows["lr"], color="#4CAF50", **style)
+        ax.set_xlabel("Step")
+        ax.set_ylabel("Learning Rate")
+        ax.set_title("LR Schedule (cosine + warmup)")
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(plot_dir / "lr_schedule.png", dpi=dpi)
+        plt.close(fig)
+
+    print(f"[plot] Saved plots → {plot_dir}/")
+
+
 # TRAINING LOOP
 def train():
     random.seed(CONFIG["seed"])
     np.random.seed(CONFIG["seed"])
     torch.manual_seed(CONFIG["seed"])
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
     print(f"Training on: {device}")
 
     project_root   = Path(CONFIG["project_root"])
@@ -306,7 +489,7 @@ def train():
     print(f"Parameters: {total:,} total | {trainable:,} trainable (Text encoder is frozen)")
 
     # LOAD BEST PRE-TRAINED MODEL
-    best_model_path = os.path.join(checkpoint_dir, "best_model.pt")
+    best_model_path = os.path.join(checkpoint_dir, "best_model_upscaled.pt")
     if os.path.exists(best_model_path):
         print(f"Loading pre-trained weights from {best_model_path}...")
         checkpoint = torch.load(best_model_path, map_location=device)
@@ -344,8 +527,20 @@ def train():
 
     global_step      = 0
     best_val_loss    = float('inf')
+    last_val_loss    = float('inf')
     patience_counter = 0
     stopped_early    = False
+    t_start          = time.time()
+    tokens_per_sec_ema = None
+
+    # CSV log setup
+    log_path = Path(CONFIG["log_path"])
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_columns = ["epoch", "step", "train_loss", "val_loss", "lr", "tokens_per_sec", "elapsed_min"]
+    log_file   = open(log_path, "w", newline="")
+    log_writer = csv.DictWriter(log_file, fieldnames=log_columns)
+    log_writer.writeheader()
+    log_file.flush()
 
     model.train()
 
@@ -355,10 +550,11 @@ def train():
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}", leave=True)
 
         for batch in progress_bar:
+            step_t0   = time.time()
             input_ids = batch["input_ids"].to(device)
             labels    = batch["labels"].to(device)
             timesteps = batch["timesteps"].to(device)
-            
+
             text_input_ids = batch["text_input_ids"].to(device)
             text_attention_mask = batch["text_attention_mask"].to(device)
             text_padding_mask = (text_attention_mask == 0)
@@ -377,27 +573,57 @@ def train():
 
             global_step += 1
 
+            step_time = max(time.time() - step_t0, 1e-6)
+            tps = input_ids.numel() / step_time
+            tokens_per_sec_ema = (
+                tps if tokens_per_sec_ema is None
+                else 0.05 * tps + 0.95 * tokens_per_sec_ema
+            )
+
             if global_step % CONFIG["log_every"] == 0:
-                current_lr = scheduler.get_last_lr()[0]
+                current_lr  = scheduler.get_last_lr()[0]
+                elapsed_min = (time.time() - t_start) / 60
                 progress_bar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{current_lr:.2e}")
                 wandb.log({"train/loss": loss.item(), "train/lr": current_lr}, step=global_step)
+                log_writer.writerow({
+                    "epoch": epoch + 1, "step": global_step,
+                    "train_loss": round(loss.item(), 6), "val_loss": "",
+                    "lr": round(current_lr, 8),
+                    "tokens_per_sec": round(tokens_per_sec_ema, 1),
+                    "elapsed_min": round(elapsed_min, 2),
+                })
+                log_file.flush()
 
             if global_step % CONFIG["val_every"] == 0:
-                val_loss = run_validation(model, val_loader, device)
+                val_loss      = run_validation(model, val_loader, device)
+                last_val_loss = val_loss
                 print(f"  → Val loss: {val_loss:.4f}")
                 wandb.log({"val/loss": val_loss}, step=global_step)
 
                 generate_samples(model, tokenizer, hf_tokenizer, device, global_step)
+
+                elapsed_min = (time.time() - t_start) / 60
+                log_writer.writerow({
+                    "epoch": epoch + 1, "step": global_step,
+                    "train_loss": "", "val_loss": round(val_loss, 6),
+                    "lr": round(scheduler.get_last_lr()[0], 8),
+                    "tokens_per_sec": round(tokens_per_sec_ema or 0, 1),
+                    "elapsed_min": round(elapsed_min, 2),
+                })
+                log_file.flush()
 
                 if val_loss < best_val_loss:
                     best_val_loss    = val_loss
                     patience_counter = 0
                     ckpt_path = checkpoint_dir / "best_finetuned_model.pt"
                     torch.save({
-                        "step": global_step,
-                        "model": model.state_dict(),
+                        "epoch"    : epoch + 1,
+                        "step"     : global_step,
+                        "model"    : model.state_dict(),
                         "optimizer": optimizer.state_dict(),
-                        "config": CONFIG,
+                        "scheduler": scheduler.state_dict(),
+                        "val_loss" : val_loss,
+                        "config"   : CONFIG,
                     }, ckpt_path)
                     print("Saved best finetuned model")
 
@@ -417,10 +643,31 @@ def train():
                         stopped_early = True
                         break
 
+        # Periodic checkpoint every 3 epochs
+        if (epoch + 1) % 3 == 0:
+            save_path = checkpoint_dir / f"finetuned_epoch_{epoch+1}.pt"
+            torch.save({
+                "epoch"    : epoch + 1,
+                "step"     : global_step,
+                "model"    : model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "val_loss" : last_val_loss,
+                "config"   : CONFIG,
+            }, save_path)
+            print(f"  Periodic checkpoint → {save_path.name}")
+
         if stopped_early:
             break
 
+    log_file.close()
     print("Fine-tuning complete." + (" (early stop)" if stopped_early else ""))
+    print(f"Log saved → {log_path}")
+    save_plots(str(log_path), CONFIG["plot_dir"])
+    save_cfg_samples(
+        model, tokenizer, hf_tokenizer, device,
+        out_path=str(project_root / "outputs" / "finetune_samples.txt"),
+    )
     wandb.finish()
 
 if __name__ == "__main__":
