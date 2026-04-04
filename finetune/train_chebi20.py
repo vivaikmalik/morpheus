@@ -367,6 +367,59 @@ def _decode_ids(ids, tokenizer):
     return tokenizer.decode(ids)
 
 
+@torch.no_grad()
+def _apply_eos_truncation(model, tokenizer, hf_tokenizer,
+                          all_gen_ids, prompts, device):
+    """
+    Run one extra forward pass at t=0, find the position with the highest EOS
+    probability for each molecule, and truncate there.  Only real chemical token
+    positions are considered (EOS/PAD/MASK positions are skipped).
+    """
+    bs      = CONFIG["eval_batch_size"]
+    n_total = len(prompts)
+    result  = []
+
+    for b_start in range(0, n_total, bs):
+        b_end     = min(b_start + bs, n_total)
+        b_ids     = all_gen_ids[b_start:b_end]
+        b_prompts = prompts[b_start:b_end]
+        num_mols  = len(b_prompts)
+
+        input_ids = torch.tensor(b_ids, dtype=torch.long, device=device)
+
+        text_inputs = hf_tokenizer(
+            b_prompts, padding=True, truncation=True,
+            max_length=128, return_tensors="pt"
+        ).to(device)
+        text_padding_mask = (text_inputs["attention_mask"] == 0)
+        text_embeds       = model.get_text_embeddings(
+            text_inputs["input_ids"], text_inputs["attention_mask"]
+        )
+
+        step_t    = torch.zeros(num_mols, 1, device=device)
+        logits    = model(input_ids, step_t, text_embeds, text_padding_mask)
+        eos_probs = torch.softmax(logits, dim=-1)[:, :, tokenizer.eos_token_id]
+
+        for mol_idx in range(num_mols):
+            ids   = b_ids[mol_idx][:]
+            probs = eos_probs[mol_idx].cpu().tolist()
+
+            best_pos, best_prob = -1, -1.0
+            for pos, (tok, p) in enumerate(zip(ids, probs)):
+                if tok in (tokenizer.eos_token_id,
+                           tokenizer.pad_token_id,
+                           tokenizer.mask_token_id):
+                    continue
+                if p > best_prob:
+                    best_prob, best_pos = p, pos
+
+            if best_pos >= 0:
+                ids = ids[:best_pos]
+            result.append(ids)
+
+    return result
+
+
 def generate_samples(model, tokenizer, hf_tokenizer, device, step):
     """Print a few CFG samples during training — ChEBI-20 style prompts."""
     model.eval()
@@ -459,13 +512,20 @@ def _fp_tanimoto(mol_a, mol_b, fp_type: str) -> float:
     return DataStructs.TanimotoSimilarity(fp_a, fp_b)
 
 
-def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path):
+def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
+                      eos_truncate: bool = False):
     """
     Generate molecules for all ChEBI-20 test prompts and compute TGM-DLM metrics.
     Saves per-row CSV + summary text file.
+
+    Args:
+        eos_truncate: if True, run a post-hoc t=0 forward pass and truncate each
+                      sequence at the position with highest EOS probability before
+                      decoding.  Useful for diagnosing EOS-length issues.
     """
+    eost_tag = " [eos_truncate]" if eos_truncate else ""
     print(f"\n{'='*65}")
-    print(f"  TEST SET EVALUATION — {test_csv.name}")
+    print(f"  TEST SET EVALUATION{eost_tag} — {test_csv.name}")
     print(f"  cfg={CONFIG['eval_cfg_scale']}  T={CONFIG['eval_temperature']}  "
           f"steps={CONFIG['eval_steps']}")
     print(f"{'='*65}")
@@ -489,6 +549,13 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path):
             num_steps=CONFIG["eval_steps"],
         )
         all_gen_ids.extend(batch_ids)
+
+    # Optional post-hoc EOS truncation
+    if eos_truncate:
+        print("  [eos_truncate] Running t=0 forward pass to truncate sequences ...")
+        all_gen_ids = _apply_eos_truncation(
+            model, tokenizer, hf_tokenizer, all_gen_ids, prompts, device
+        )
 
     # Compute per-molecule metrics
     rows = []
@@ -549,8 +616,9 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path):
 
     df_out = pd.DataFrame(rows)
 
-    # Save per-row CSV
-    out_csv = Path(CONFIG["eval_csv"])
+    # Save per-row CSV — add _eost suffix when eos_truncate is on
+    base_csv = Path(CONFIG["eval_csv"])
+    out_csv  = base_csv.with_stem(base_csv.stem + ("_eost" if eos_truncate else ""))
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     df_out.to_csv(out_csv, index=False)
     print(f"\n  Per-row results → {out_csv}")
@@ -570,9 +638,10 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path):
     maccs_avg  = valid_rows["maccs_sim"].mean()  if n_valid else float("nan")
     rdk_avg    = valid_rows["rdk_sim"].mean()    if n_valid else float("nan")
 
+    eost_label = " + EOS truncation" if eos_truncate else ""
     summary_lines = [
         "=" * 65,
-        "  ChEBI-20 EVALUATION — Morpheus 27M",
+        f"  ChEBI-20 EVALUATION — Morpheus 27M{eost_label}",
         f"  Checkpoint : {Path(CONFIG['save_ckpt']).name}",
         f"  Test set   : {n} molecules",
         f"  CFG scale  : {CONFIG['eval_cfg_scale']}  "
@@ -597,7 +666,8 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path):
 
     print("\n" + "\n".join(summary_lines))
 
-    out_txt = Path(CONFIG["eval_summary"])
+    base_txt = Path(CONFIG["eval_summary"])
+    out_txt  = base_txt.with_stem(base_txt.stem + ("_eost" if eos_truncate else ""))
     with open(out_txt, "w") as f:
         f.write("\n".join(summary_lines) + "\n")
     print(f"\n  Summary → {out_txt}")
@@ -892,4 +962,66 @@ def train():
 
 
 if __name__ == "__main__":
-    train()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Train or evaluate Morpheus on ChEBI-20")
+    parser.add_argument("--eval_only", action="store_true",
+                        help="Skip training; load best_chebi20_model.pt and run "
+                             "evaluate_test_set on data/chebi20_test.csv")
+    parser.add_argument("--eos_truncate", action="store_true",
+                        help="Apply post-hoc EOS truncation during evaluation "
+                             "(requires --eval_only or runs after normal training)")
+    args = parser.parse_args()
+
+    if args.eval_only:
+        # ── Eval-only mode ────────────────────────────────────────────────────
+        random.seed(CONFIG["seed"])
+        np.random.seed(CONFIG["seed"])
+        torch.manual_seed(CONFIG["seed"])
+
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
+        print(f"[device] {device}")
+        print(f"[mode]   eval_only  eos_truncate={args.eos_truncate}")
+
+        tokenizer_path = PROJECT_ROOT / "chemical_tokenizer.json"
+        tokenizer      = ChemicalTokenizer(tokenizer_path)
+        hf_tokenizer   = AutoTokenizer.from_pretrained(CONFIG["text_model"])
+
+        # Ensure ChEBI-20 data is present (downloads if needed)
+        data_dir = Path(CONFIG["data_dir"])
+        _, _, test_csv = prepare_chebi20(tokenizer_path, data_dir)
+
+        model = MolecularDiffusionModel(
+            vocab_size      = CONFIG["vocab_size"],
+            hidden_size     = CONFIG["hidden_size"],
+            num_heads       = CONFIG["num_heads"],
+            ffn_dim         = CONFIG["ffn_dim"],
+            num_layers      = CONFIG["num_layers"],
+            max_length      = CONFIG["max_length"],
+            pad_token_id    = tokenizer.pad_token_id,
+            text_model_name = CONFIG["text_model"],
+            uncond_prob     = 0.0,
+            dropout         = 0.0,
+        ).to(device)
+
+        best_ckpt = Path(CONFIG["save_ckpt"])
+        if not best_ckpt.exists():
+            raise FileNotFoundError(
+                f"Checkpoint not found: {best_ckpt}\n"
+                "Run training first or pass a valid --save_ckpt path in CONFIG."
+            )
+        print(f"[ckpt] Loading {best_ckpt.name} ...")
+        ckpt = torch.load(best_ckpt, map_location=device)
+        model.load_state_dict(ckpt["model"], strict=True)
+        print(f"  val_loss={ckpt.get('val_loss', float('nan')):.4f}  "
+              f"step={ckpt.get('step', '?')}")
+
+        evaluate_test_set(model, tokenizer, hf_tokenizer, device,
+                          test_csv, eos_truncate=args.eos_truncate)
+    else:
+        train()

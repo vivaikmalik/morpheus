@@ -357,7 +357,8 @@ class ConditionalSELFIESDataset(Dataset):
         row         = self.df.iloc[idx]
         selfies_str = str(row["response"])
         prompt      = str(row.get("prompt", "A chemical molecule"))
-        token_ids   = self.tokenizer.encode(selfies_str)[:self.max_length]
+        token_ids   = self.tokenizer.encode(selfies_str)[:(self.max_length - 1)]
+        token_ids   = token_ids + [self.tokenizer.eos_token_id]
         pad_len     = self.max_length - len(token_ids)
         token_ids   = token_ids + [self.tokenizer.pad_token_id] * pad_len
         return {"input_ids": torch.tensor(token_ids, dtype=torch.long), "prompt": prompt}

@@ -1,7 +1,7 @@
 """
 inference/evaluate_prompted.py
 -------------------------------
-Evaluates the text-conditioned finetuned model on data/test.csv.
+Evaluates the text-conditioned finetuned model on a test CSV.
 
 For each prompt, generates one molecule via MaskGIT + CFG, then computes:
   - Validity, exact match, scaffold match
@@ -14,8 +14,12 @@ For each prompt, generates one molecule via MaskGIT + CFG, then computes:
 Usage:
     python inference/evaluate_prompted.py
     python inference/evaluate_prompted.py --cfg 2.0 --temp 0.8 --steps 50
+    python inference/evaluate_prompted.py --checkpoint checkpoints/best_chebi20_model.pt \\
+                                          --test_csv data/chebi20_test.csv
+    python inference/evaluate_prompted.py --checkpoint checkpoints/best_chebi20_model.pt \\
+                                          --test_csv data/chebi20_test.csv --eos_truncate
 
-Output CSV: outputs/eval_27M_cfg{X}_temp{Y}_steps{Z}.csv
+Output CSV: outputs/eval_{ckpt_stem}_cfg{X}_temp{Y}_steps{Z}[_eost].csv
 """
 
 import argparse
@@ -43,10 +47,10 @@ from tokenizer.chemicalTokenizer import ChemicalTokenizer
 # PATHS & CONFIG
 # =============================================================================
 
-PROJECT_ROOT    = Path(__file__).parent.parent
+PROJECT_ROOT       = Path(__file__).parent.parent
 DEFAULT_CHECKPOINT = PROJECT_ROOT / "checkpoints" / "best_finetuned_model.pt"
-TOKENIZER_PATH  = PROJECT_ROOT / "chemical_tokenizer.json"
-TEST_CSV        = PROJECT_ROOT / "data" / "test.csv"
+TOKENIZER_PATH     = PROJECT_ROOT / "chemical_tokenizer.json"
+DEFAULT_TEST_CSV   = PROJECT_ROOT / "data" / "test.csv"
 GEN_CFG = {
     "cfg_scale"  : 3.0,
     "temperature": 1.2,
@@ -233,6 +237,69 @@ def generate_cfg_batch(model, tokenizer, hf_tokenizer, prompts: list, device) ->
 
 
 # =============================================================================
+# POST-HOC EOS TRUNCATION
+# =============================================================================
+
+@torch.no_grad()
+def apply_eos_truncation(model, tokenizer, hf_tokenizer,
+                         all_gen_ids: list, prompts: list, device) -> list:
+    """
+    Run one extra forward pass at t=0 for each batch, find the position with
+    the highest EOS probability, and truncate there.  Positions already holding
+    EOS or PAD are skipped.  Returns a new list of token-ID lists.
+    """
+    max_length = GEN_CFG["max_length"]
+    batch_size = GEN_CFG["batch_size"]
+    n_total    = len(prompts)
+    truncated  = []
+
+    for b_start in range(0, n_total, batch_size):
+        b_end    = min(b_start + batch_size, n_total)
+        b_ids    = all_gen_ids[b_start:b_end]
+        b_prompts = prompts[b_start:b_end]
+        num_mols  = len(b_prompts)
+
+        input_ids = torch.tensor(b_ids, dtype=torch.long, device=device)
+
+        text_inputs = hf_tokenizer(
+            b_prompts, padding=True, truncation=True,
+            max_length=128, return_tensors="pt"
+        ).to(device)
+        text_padding_mask = (text_inputs["attention_mask"] == 0)
+        text_embeds       = model.get_text_embeddings(
+            text_inputs["input_ids"], text_inputs["attention_mask"]
+        )
+
+        # t=0 forward pass (fully denoised signal)
+        step_t  = torch.zeros(num_mols, 1, device=device)
+        logits  = model(input_ids, step_t, text_embeds, text_padding_mask)
+        eos_probs = torch.softmax(logits, dim=-1)[:, :, tokenizer.eos_token_id]
+        # [num_mols, max_length]
+
+        for mol_idx in range(num_mols):
+            ids      = b_ids[mol_idx][:]
+            probs    = eos_probs[mol_idx].cpu().tolist()
+
+            # Ignore positions that are already EOS/PAD/MASK — only consider
+            # positions that carry a real chemical token
+            best_pos, best_prob = -1, -1.0
+            for pos, (tok, p) in enumerate(zip(ids, probs)):
+                if tok in (tokenizer.eos_token_id,
+                           tokenizer.pad_token_id,
+                           tokenizer.mask_token_id):
+                    continue
+                if p > best_prob:
+                    best_prob, best_pos = p, pos
+
+            if best_pos >= 0:
+                ids = ids[:best_pos]   # truncate before that position
+
+            truncated.append(ids)
+
+    return truncated
+
+
+# =============================================================================
 # PER-MOLECULE METRICS
 # =============================================================================
 
@@ -377,6 +444,13 @@ def main():
     parser.add_argument("--checkpoint", type=str, default=None,
                         help="Path to checkpoint .pt file "
                              "(default: checkpoints/best_finetuned_model.pt)")
+    parser.add_argument("--test_csv", type=str, default=None,
+                        help="Path to test CSV with 'prompt' and 'response' columns "
+                             "(default: data/test.csv)")
+    parser.add_argument("--eos_truncate", action="store_true",
+                        help="Post-hoc EOS truncation: run one forward pass at t=0 "
+                             "and truncate each sequence at the position with highest "
+                             "EOS probability")
     args = parser.parse_args()
 
     checkpoint_path = (Path(args.checkpoint) if args.checkpoint
@@ -384,13 +458,19 @@ def main():
     if not checkpoint_path.is_absolute():
         checkpoint_path = PROJECT_ROOT / checkpoint_path
 
+    test_csv_path = (Path(args.test_csv) if args.test_csv else DEFAULT_TEST_CSV)
+    if not test_csv_path.is_absolute():
+        test_csv_path = PROJECT_ROOT / test_csv_path
+
     GEN_CFG["cfg_scale"]   = args.cfg
     GEN_CFG["temperature"] = args.temp
     GEN_CFG["num_steps"]   = args.steps
 
-    ckpt_stem  = checkpoint_path.stem          # e.g. "best_finetuned_eos_fix"
+    ckpt_stem  = checkpoint_path.stem
+    eost_tag   = "_eost" if args.eos_truncate else ""
     output_csv = (PROJECT_ROOT / "outputs" /
-                  f"eval_{ckpt_stem}_cfg{args.cfg}_temp{args.temp}_steps{args.steps}.csv")
+                  f"eval_{ckpt_stem}_cfg{args.cfg}_temp{args.temp}"
+                  f"_steps{args.steps}{eost_tag}.csv")
 
     # Device
     if torch.cuda.is_available():
@@ -401,7 +481,9 @@ def main():
         device = torch.device("cpu")
     print(f"[device] {device}")
     print(f"[ckpt]   {checkpoint_path}")
-    print(f"[config] cfg={args.cfg}  temp={args.temp}  steps={args.steps}")
+    print(f"[data]   {test_csv_path}")
+    print(f"[config] cfg={args.cfg}  temp={args.temp}  steps={args.steps}  "
+          f"eos_truncate={args.eos_truncate}")
     print(f"[output] {output_csv.name}")
 
     # Tokenizers
@@ -412,12 +494,12 @@ def main():
     model, _ = load_model(device, checkpoint_path)
 
     # Test data
-    print(f"\n[data] Loading {TEST_CSV} ...")
-    df_test = pd.read_csv(TEST_CSV)
+    print(f"\n[data] Loading {test_csv_path} ...")
+    df_test = pd.read_csv(test_csv_path)
     print(f"  {len(df_test):,} rows  |  columns: {list(df_test.columns)}")
-    prompts   = df_test["prompt"].tolist()
+    prompts    = df_test["prompt"].tolist()
     gt_selfies = df_test["response"].tolist()
-    n_total   = len(prompts)
+    n_total    = len(prompts)
 
     # Generate in batches
     batch_size  = GEN_CFG["batch_size"]
@@ -432,20 +514,26 @@ def main():
     for b in tqdm(range(n_batches), desc="Generating"):
         start = b * batch_size
         end   = min(start + batch_size, n_total)
-        batch_prompts = prompts[start:end]
-        batch_ids     = generate_cfg_batch(
-            model, tokenizer, hf_tokenizer, batch_prompts, device
+        batch_ids = generate_cfg_batch(
+            model, tokenizer, hf_tokenizer, prompts[start:end], device
         )
         all_gen_ids.extend(batch_ids)
 
     gen_time = time.time() - t0
     print(f"  Done in {gen_time:.1f}s  ({gen_time/n_total:.2f}s/mol)")
 
+    # Optional post-hoc EOS truncation
+    if args.eos_truncate:
+        print(f"\n[eos_truncate] Running t=0 forward pass to truncate sequences ...")
+        all_gen_ids = apply_eos_truncation(
+            model, tokenizer, hf_tokenizer, all_gen_ids, prompts, device
+        )
+
     # Compute per-molecule metrics
     print(f"\n[metrics] Computing metrics for {n_total} molecules ...")
     rows = []
-    for i, (prompt, gt, gen_ids) in enumerate(
-        tqdm(zip(prompts, gt_selfies, all_gen_ids), total=n_total, desc="Scoring")
+    for prompt, gt, gen_ids in tqdm(
+        zip(prompts, gt_selfies, all_gen_ids), total=n_total, desc="Scoring"
     ):
         rows.append(compute_row_metrics(prompt, gt, gen_ids, tokenizer))
 
