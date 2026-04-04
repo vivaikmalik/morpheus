@@ -1,0 +1,589 @@
+"""
+training/finetune_text.py
+--------------------------
+Fine-tunes the pretrained Morpheus model on CheBI-20 for
+text-conditioned molecule generation.
+
+Pipeline:
+  1. Load pretrained revealPad checkpoint (strict=False — new modules ignored)
+  2. New modules start from initialization:
+     - CrossAttention in each block (zero-init out_proj → no initial impact)
+     - SciBERT text encoder (frozen pretrained weights)
+     - Text projector MLP (random init, learnable)
+     - Null token for CFG (random init, learnable)
+  3. Fine-tune on CheBI-20 text→SELFIES pairs
+  4. Generate sample molecules with CFG at validation time
+
+Prerequisites:
+    python scripts/prepare_chebi20.py
+
+Usage:
+    python training/finetune_text.py
+    python training/finetune_text.py --checkpoint checkpoints/best_model.pt
+    python training/finetune_text.py --lr 1e-4 --epochs 10
+"""
+
+import sys
+import argparse
+import random
+import numpy as np
+import torch
+import torch.nn.functional as F
+import pandas as pd
+import selfies as sf
+from pathlib import Path
+from rdkit import Chem
+from rdkit.Chem import Descriptors
+from torch.utils.data import DataLoader
+from torch.optim import AdamW
+from transformers import get_cosine_schedule_with_warmup, AutoTokenizer
+import wandb
+
+ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
+
+from tokenizer.chemicalTokenizer import ChemicalTokenizer
+from dataExtractor.textConditionedDataset import TextConditionedDataset
+from training.textDiffusionCollator import TextDiffusionCollator
+from model.molecularDiffusionModel import MolecularDiffusionModel
+
+
+# =============================================================================
+# CONFIG
+# =============================================================================
+
+CONFIG = {
+    # Model (must match pretrained checkpoint for loadable weights)
+    "vocab_size"  : 110,
+    "hidden_size" : 256,
+    "num_heads"   : 8,
+    "ffn_dim"     : 512,
+    "num_layers"  : 8,
+    "max_length"  : 74,
+    "dropout"     : 0.1,
+
+    # Text conditioning
+    "text_model"    : "allenai/scibert_scivocab_uncased",
+    "max_text_len"  : 256,     # max SciBERT tokens for text description
+    "uncond_prob"   : 0.1,     # CFG dropout probability
+
+    # Fine-tuning
+    "batch_size"    : 32,      # smaller than pretraining (text encoding is heavy)
+    "learning_rate" : 1e-4,    # lower than pretraining — we're fine-tuning
+    "weight_decay"  : 0.01,
+    "max_grad_norm" : 1.0,
+    "num_epochs"    : 10,
+    "warmup_ratio"  : 0.06,    # fraction of total steps for warmup
+
+    # Data
+    "num_workers" : 0,
+    "seed"        : 42,
+
+    # Logging & checkpoints
+    "log_every"  : 50,
+    "val_every"  : 500,
+    "save_every" : 1000,
+
+    # Generation (for validation samples)
+    "gen_steps"       : 32,
+    "gen_temperature" : 1.0,
+    "gen_num_mols"    : 4,
+    "cfg_scale"       : 3.0,
+
+    # Paths
+    "pretrained_checkpoint": str(ROOT / "checkpoints" / "best_model.pt"),
+    "data_dir"             : str(ROOT / "data"),
+    "checkpoint_dir"       : str(ROOT / "checkpoints"),
+    "wandb_project"        : "morpheus-text-finetune",
+}
+
+
+# =============================================================================
+# LOSS FUNCTION (same as revealPad — with PAD downweighting)
+# =============================================================================
+
+def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
+    B, seq_len, vocab_size = logits.shape
+    device = logits.device
+
+    # Downweight PAD predictions (revealPad strategy)
+    vocab_weights = torch.ones(vocab_size, device=device)
+    vocab_weights[pad_token_id] = 0.1
+
+    raw_loss = F.cross_entropy(
+        logits.view(-1, vocab_size),
+        labels.view(-1),
+        weight=vocab_weights,
+        ignore_index=-100,
+        reduction='none'
+    )
+
+    # Timestep weighting: weight more at low t (near clean)
+    weights = (1.0 - timesteps)
+    weights = weights.unsqueeze(1).expand(-1, seq_len, -1).reshape(-1)
+
+    valid = (labels.view(-1) != -100).float()
+    loss = (raw_loss * weights * valid).sum() / (weights * valid).sum().clamp(min=1e-8)
+    return loss
+
+
+# =============================================================================
+# VALIDATION
+# =============================================================================
+
+def run_validation(model, val_loader, device, max_batches=100):
+    """Run validation and return average loss."""
+    model.eval()
+    total_loss  = 0.0
+    total_steps = 0
+
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            if i >= max_batches:
+                break
+
+            input_ids = batch["input_ids"].to(device)
+            labels    = batch["labels"].to(device)
+            timesteps = batch["timesteps"].to(device)
+            text_ids  = batch["text_input_ids"].to(device)
+            text_mask = batch["text_attention_mask"].to(device)
+            text_pad  = batch["text_padding_mask"].to(device)
+
+            # Get text embeddings
+            text_embeds = model.get_text_embeddings(text_ids, text_mask)
+
+            # Forward pass (no CFG dropout during validation)
+            logits = model(input_ids, timesteps, text_embeds, text_pad)
+            loss   = diffusion_loss(logits, labels, timesteps)
+
+            total_loss  += loss.item()
+            total_steps += 1
+
+    model.train()
+    return total_loss / max(total_steps, 1)
+
+
+# =============================================================================
+# GENERATION WITH CFG
+# =============================================================================
+
+def generate_with_cfg(model, tokenizer, text_tokenizer, device,
+                      prompts, cfg_scale=3.0, num_steps=32, temperature=1.0):
+    """
+    Generate molecules from text prompts using classifier-free guidance.
+
+    CFG formula at each denoising step:
+        logits = logits_uncond + cfg_scale * (logits_cond - logits_uncond)
+
+    Higher cfg_scale = more text-faithful, less diverse.
+    """
+    model.eval()
+    max_length = CONFIG["max_length"]
+    B = len(prompts)
+
+    # --- Encode text prompts ---
+    text_enc = text_tokenizer(
+        prompts, padding=True, truncation=True,
+        max_length=CONFIG["max_text_len"], return_tensors="pt",
+    ).to(device)
+
+    with torch.no_grad():
+        text_embeds = model.get_text_embeddings(
+            text_enc["input_ids"], text_enc["attention_mask"]
+        )
+    text_pad = (text_enc["attention_mask"] == 0)
+
+    # --- Start fully masked ---
+    input_ids = torch.full(
+        (B, max_length), tokenizer.mask_token_id,
+        dtype=torch.long, device=device,
+    )
+
+    t_vals = torch.linspace(1.0, 0.0, num_steps, device=device)
+
+    with torch.no_grad():
+        for step_idx, t_val in enumerate(t_vals):
+            step_t = t_val.repeat(B).unsqueeze(-1)
+
+            # Conditional forward pass (with text)
+            logits_cond = model(input_ids, step_t, text_embeds, text_pad)
+
+            # Unconditional forward pass (null token)
+            logits_uncond = model(input_ids, step_t, None, None)
+
+            # CFG interpolation
+            logits = logits_uncond + cfg_scale * (logits_cond - logits_uncond)
+
+            # Block MASK from being a final output
+            if step_idx < num_steps - 1:
+                logits[:, :, tokenizer.mask_token_id] = float('-inf')
+
+            # Sample
+            scaled_logits = logits / temperature
+            probs   = torch.softmax(scaled_logits, dim=-1)
+            sampled = torch.distributions.Categorical(probs=probs).sample()
+
+            # Confidence-based re-masking (except on last step)
+            confidence = torch.gather(probs, 2, sampled.unsqueeze(-1)).squeeze(-1)
+
+            alpha_t     = (torch.cos(t_val * torch.pi / 2) ** 2).item()
+            num_to_mask = int((1.0 - alpha_t) * max_length)
+
+            if num_to_mask > 0 and step_idx < num_steps - 1:
+                _, mask_indices = torch.topk(
+                    confidence, num_to_mask, dim=-1, largest=False
+                )
+                sampled.scatter_(1, mask_indices, tokenizer.mask_token_id)
+
+            input_ids = sampled
+
+    model.train()
+    return input_ids
+
+
+def generate_and_log(model, tokenizer, text_tokenizer, device, step,
+                     val_df=None):
+    """Generate sample molecules and print/log results."""
+    # Pick some prompts from validation set
+    if val_df is not None and len(val_df) >= CONFIG["gen_num_mols"]:
+        sample_df = val_df.sample(n=CONFIG["gen_num_mols"], random_state=step)
+        prompts      = sample_df["description"].tolist()
+        gt_selfies   = sample_df["selfies"].tolist()
+    else:
+        prompts = [
+            "The molecule is a member of the class of pyrimidines.",
+            "The molecule is a primary alcohol with a hydroxyl group.",
+            "The molecule contains a benzene ring with a carboxylic acid group.",
+            "The molecule is a simple amino acid.",
+        ][:CONFIG["gen_num_mols"]]
+        gt_selfies = [None] * len(prompts)
+
+    # Generate
+    raw_ids = generate_with_cfg(
+        model, tokenizer, text_tokenizer, device,
+        prompts,
+        cfg_scale=CONFIG["cfg_scale"],
+        num_steps=CONFIG["gen_steps"],
+        temperature=CONFIG["gen_temperature"],
+    )
+
+    # Decode and analyze
+    print(f"\n{'='*70}")
+    print(f"  GENERATED MOLECULES — Step {step}")
+    print(f"{'='*70}")
+
+    valid_count = 0
+    for i in range(len(prompts)):
+        ids = raw_ids[i].cpu().tolist()
+
+        # Truncate at EOS
+        if tokenizer.eos_token_id in ids:
+            ids = ids[:ids.index(tokenizer.eos_token_id)]
+
+        selfies_str = tokenizer.decode(ids)
+
+        try:
+            smiles = sf.decoder(selfies_str)
+            mol    = Chem.MolFromSmiles(smiles)
+            if mol is not None:
+                canonical = Chem.MolToSmiles(mol)
+                logp  = round(Descriptors.MolLogP(mol), 2)
+                heavy = mol.GetNumHeavyAtoms()
+                valid_count += 1
+                print(f"  [{i}] ✅ LogP={logp:+.2f}  Heavy={heavy:>2}  {canonical[:50]}")
+            else:
+                print(f"  [{i}] ❌ RDKit rejected: {smiles[:50]}")
+        except Exception as e:
+            print(f"  [{i}] ❌ Error: {e}")
+
+        # Show prompt (truncated)
+        prompt_short = prompts[i][:70] + ("..." if len(prompts[i]) > 70 else "")
+        print(f"       Prompt: {prompt_short}")
+
+        # Show ground truth if available
+        if gt_selfies[i] is not None:
+            try:
+                gt_smiles = sf.decoder(gt_selfies[i])
+                gt_mol = Chem.MolFromSmiles(gt_smiles)
+                if gt_mol:
+                    print(f"       GT:     {Chem.MolToSmiles(gt_mol)[:50]}")
+            except Exception:
+                pass
+        print()
+
+    print(f"  Valid: {valid_count}/{len(prompts)}")
+    print(f"{'='*70}\n")
+
+
+# =============================================================================
+# LOAD PRETRAINED CHECKPOINT
+# =============================================================================
+
+def load_pretrained(model, checkpoint_path, device):
+    """
+    Load pretrained weights with strict=False.
+
+    What loads:    token_embedding, pos_embedding, timestep_embedding,
+                   input_norm, blocks.*.norm1, blocks.*.attention.*,
+                   blocks.*.norm2, blocks.*.ffn.*, output_norm, lm_head
+    What's new:    text_encoder (frozen pretrained SciBERT — not from our ckpt),
+                   text_proj, null_token,
+                   blocks.*.norm_cross, blocks.*.cross_attention.*
+    """
+    print(f"Loading pretrained checkpoint: {checkpoint_path}")
+
+    checkpoint = torch.load(checkpoint_path, map_location=device,
+                            weights_only=False)
+    pretrained_state = checkpoint["model"]
+
+    # Load with strict=False — missing keys are expected (new modules)
+    missing, unexpected = model.load_state_dict(pretrained_state, strict=False)
+
+    print(f"  Trained for {checkpoint.get('step', '?'):,} steps "
+          f"(epoch {checkpoint.get('epoch', '?')})")
+    print(f"  Loaded keys:    {len(pretrained_state) - len(unexpected)}")
+    print(f"  Missing keys:   {len(missing)} (new modules — expected)")
+    print(f"  Unexpected keys: {len(unexpected)}")
+
+    if unexpected:
+        print(f"  WARNING — unexpected keys: {unexpected[:5]}...")
+
+    # Sanity check: cross-attention keys should be in missing
+    cross_attn_missing = [k for k in missing if "cross_attention" in k]
+    text_missing       = [k for k in missing if "text_" in k or "null_token" in k]
+    print(f"  Cross-attention keys (new): {len(cross_attn_missing)}")
+    print(f"  Text encoder/proj keys (new): {len(text_missing)}")
+
+    return checkpoint.get("config", {})
+
+
+# =============================================================================
+# MAIN TRAINING LOOP
+# =============================================================================
+
+def train(args):
+    # --- Seed everything ---
+    random.seed(CONFIG["seed"])
+    np.random.seed(CONFIG["seed"])
+    torch.manual_seed(CONFIG["seed"])
+    torch.cuda.manual_seed_all(CONFIG["seed"])
+
+    device = torch.device(
+        "cuda" if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available()
+        else "cpu"
+    )
+    print(f"Device: {device}")
+
+    checkpoint_dir = Path(CONFIG["checkpoint_dir"])
+    checkpoint_dir.mkdir(exist_ok=True)
+
+    # --- Tokenizers ---
+    mol_tokenizer  = ChemicalTokenizer(str(ROOT / "chemical_tokenizer.json"))
+    text_tokenizer = AutoTokenizer.from_pretrained(CONFIG["text_model"])
+
+    # --- Load data ---
+    data_dir = Path(CONFIG["data_dir"])
+    train_path = data_dir / "chebi20_train.csv"
+    val_path   = data_dir / "chebi20_val.csv"
+
+    if not train_path.exists():
+        print(f"ERROR: {train_path} not found.")
+        print("Run: python scripts/prepare_chebi20.py")
+        sys.exit(1)
+
+    print("Loading CheBI-20 data...")
+    train_df = pd.read_csv(train_path)
+    val_df   = pd.read_csv(val_path)
+    print(f"  Train: {len(train_df):,}  |  Val: {len(val_df):,}")
+
+    train_dataset = TextConditionedDataset(train_df, mol_tokenizer)
+    val_dataset   = TextConditionedDataset(val_df, mol_tokenizer)
+
+    collator = TextDiffusionCollator(
+        mol_tokenizer, text_tokenizer,
+        max_text_len=CONFIG["max_text_len"]
+    )
+
+    train_loader = DataLoader(
+        train_dataset, batch_size=CONFIG["batch_size"],
+        shuffle=True, collate_fn=collator,
+        num_workers=CONFIG["num_workers"], pin_memory=True,
+    )
+    val_loader = DataLoader(
+        val_dataset, batch_size=CONFIG["batch_size"],
+        shuffle=False, collate_fn=collator,
+        num_workers=CONFIG["num_workers"], pin_memory=True,
+    )
+
+    # --- Build model ---
+    print(f"\nBuilding model with SciBERT ({CONFIG['text_model']})...")
+    model = MolecularDiffusionModel(
+        vocab_size      = CONFIG["vocab_size"],
+        hidden_size     = CONFIG["hidden_size"],
+        num_heads       = CONFIG["num_heads"],
+        ffn_dim         = CONFIG["ffn_dim"],
+        num_layers      = CONFIG["num_layers"],
+        max_length      = CONFIG["max_length"],
+        pad_token_id    = mol_tokenizer.pad_token_id,
+        text_model_name = CONFIG["text_model"],
+        uncond_prob     = CONFIG["uncond_prob"],
+        dropout         = CONFIG["dropout"],
+    ).to(device)
+
+    # --- Load pretrained weights ---
+    load_pretrained(model, args.checkpoint, device)
+
+    total, trainable, frozen = model.count_parameters()
+    print(f"\nParameters: {total:,} total | {trainable:,} trainable | "
+          f"{frozen:,} frozen (SciBERT)")
+
+    # --- Optimizer (only trainable params) ---
+    optimizer = AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=CONFIG["learning_rate"],
+        weight_decay=CONFIG["weight_decay"],
+    )
+
+    # --- Scheduler ---
+    steps_per_epoch = len(train_loader)
+    total_steps     = steps_per_epoch * CONFIG["num_epochs"]
+    warmup_steps    = int(total_steps * CONFIG["warmup_ratio"])
+
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=warmup_steps,
+        num_training_steps=total_steps,
+    )
+
+    print(f"Steps per epoch: {steps_per_epoch:,}")
+    print(f"Total steps:     {total_steps:,}")
+    print(f"Warmup steps:    {warmup_steps:,}")
+
+    # --- W&B ---
+    wandb.init(project=CONFIG["wandb_project"], config=CONFIG)
+
+    # --- Training loop ---
+    global_step   = 0
+    best_val_loss = float('inf')
+    model.train()
+
+    for epoch in range(CONFIG["num_epochs"]):
+        print(f"\n--- Epoch {epoch + 1}/{CONFIG['num_epochs']} ---")
+
+        for batch in train_loader:
+            # Move to device
+            input_ids = batch["input_ids"].to(device)
+            labels    = batch["labels"].to(device)
+            timesteps = batch["timesteps"].to(device)
+            text_ids  = batch["text_input_ids"].to(device)
+            text_mask = batch["text_attention_mask"].to(device)
+            text_pad  = batch["text_padding_mask"].to(device)
+
+            # Get text embeddings (SciBERT is frozen, projector is trainable)
+            text_embeds = model.get_text_embeddings(text_ids, text_mask)
+
+            # Forward pass (CFG dropout happens inside model.forward)
+            logits = model(input_ids, timesteps, text_embeds, text_pad)
+            loss   = diffusion_loss(logits, labels, timesteps)
+
+            # Backward
+            optimizer.zero_grad()
+            loss.backward()
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                filter(lambda p: p.requires_grad, model.parameters()),
+                CONFIG["max_grad_norm"]
+            )
+            optimizer.step()
+            scheduler.step()
+
+            global_step += 1
+
+            # --- Logging ---
+            if global_step % CONFIG["log_every"] == 0:
+                lr = scheduler.get_last_lr()[0]
+                print(f"Step {global_step:>6} | "
+                      f"loss: {loss.item():.4f} | "
+                      f"grad_norm: {grad_norm:.4f} | "
+                      f"lr: {lr:.2e}")
+                wandb.log({
+                    "train/loss"     : loss.item(),
+                    "train/grad_norm": float(grad_norm),
+                    "train/lr"       : lr,
+                    "train/epoch"    : epoch + 1,
+                }, step=global_step)
+
+            # --- Validation + generation ---
+            if global_step % CONFIG["val_every"] == 0:
+                val_loss = run_validation(model, val_loader, device)
+                print(f"  → Val loss: {val_loss:.4f}")
+                wandb.log({"val/loss": val_loss}, step=global_step)
+
+                # Generate samples
+                generate_and_log(
+                    model, mol_tokenizer, text_tokenizer,
+                    device, global_step, val_df
+                )
+
+                # Save best
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    save_path = checkpoint_dir / "best_finetuned_model.pt"
+                    torch.save({
+                        "step"      : global_step,
+                        "epoch"     : epoch + 1,
+                        "model"     : model.state_dict(),
+                        "optimizer" : optimizer.state_dict(),
+                        "scheduler" : scheduler.state_dict(),
+                        "val_loss"  : val_loss,
+                        "config"    : CONFIG,
+                    }, save_path)
+                    print(f"  ✅ New best model (val_loss: {val_loss:.4f})")
+
+            # --- Periodic checkpoint ---
+            if global_step % CONFIG["save_every"] == 0:
+                save_path = checkpoint_dir / f"finetune_step{global_step}.pt"
+                torch.save({
+                    "step"     : global_step,
+                    "epoch"    : epoch + 1,
+                    "model"    : model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
+                    "config"   : CONFIG,
+                }, save_path)
+                print(f"  💾 Checkpoint saved at step {global_step}")
+
+    print(f"\nTraining complete. Best val loss: {best_val_loss:.4f}")
+    wandb.finish()
+
+
+# =============================================================================
+# ENTRY POINT
+# =============================================================================
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Fine-tune Morpheus with text conditioning on CheBI-20"
+    )
+    parser.add_argument(
+        "--checkpoint",
+        default=CONFIG["pretrained_checkpoint"],
+        help="Path to pretrained revealPad checkpoint"
+    )
+    parser.add_argument("--lr", type=float, default=None,
+                        help="Override learning rate")
+    parser.add_argument("--epochs", type=int, default=None,
+                        help="Override number of epochs")
+    parser.add_argument("--batch_size", type=int, default=None,
+                        help="Override batch size")
+
+    args = parser.parse_args()
+
+    if args.lr is not None:
+        CONFIG["learning_rate"] = args.lr
+    if args.epochs is not None:
+        CONFIG["num_epochs"] = args.epochs
+    if args.batch_size is not None:
+        CONFIG["batch_size"] = args.batch_size
+
+    train(args)

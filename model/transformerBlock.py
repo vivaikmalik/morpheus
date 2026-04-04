@@ -58,6 +58,67 @@ class SelfAttention(nn.Module):
 
         # --- 8. Final projection ---
         return self.out_proj(attended)  # (B, seq_len, hidden_size)
+    
+class CrossAttention(nn.Module):
+    """
+    Cross-attention: Q from molecule hidden states, K & V from text embeddings.
+ 
+    out_proj is zero-initialized so that at the start of fine-tuning,
+    this layer contributes exactly zero. The model gradually learns to
+    attend to text information without disrupting pretrained behavior.
+    """
+    def __init__(self, hidden_size, num_heads, dropout=0.1):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_heads   = num_heads
+        self.head_dim    = hidden_size // num_heads
+ 
+        self.q_proj = nn.Linear(hidden_size, hidden_size)
+        self.k_proj = nn.Linear(hidden_size, hidden_size)
+        self.v_proj = nn.Linear(hidden_size, hidden_size)
+ 
+        self.out_proj = nn.Linear(hidden_size, hidden_size)
+ 
+        # Zero-init output projection — cross-attention starts as identity
+        nn.init.zeros_(self.out_proj.weight)
+        nn.init.zeros_(self.out_proj.bias)
+ 
+        self.dropout = nn.Dropout(dropout)
+ 
+    def forward(self, x, text_embeds, text_padding_mask=None):
+        """
+        x:                 (B, mol_len, hidden_size)   molecule hidden states
+        text_embeds:       (B, text_len, hidden_size)  projected text embeddings
+        text_padding_mask: (B, text_len) True where text PAD tokens are
+        returns:           (B, mol_len, hidden_size)
+        """
+        B, mol_len, _  = x.shape
+        _, text_len, _ = text_embeds.shape
+ 
+        Q = self.q_proj(x)
+        K = self.k_proj(text_embeds)
+        V = self.v_proj(text_embeds)
+ 
+        Q = Q.view(B, mol_len,  self.num_heads, self.head_dim).transpose(1, 2)
+        K = K.view(B, text_len, self.num_heads, self.head_dim).transpose(1, 2)
+        V = V.view(B, text_len, self.num_heads, self.head_dim).transpose(1, 2)
+ 
+        attn_mask = None
+        if text_padding_mask is not None:
+            attn_mask = torch.zeros((B, 1, 1, text_len), dtype=x.dtype, device=x.device)
+            mask_bool = text_padding_mask.unsqueeze(1).unsqueeze(2)
+            attn_mask = attn_mask.masked_fill(mask_bool, float('-inf'))
+ 
+        attended = F.scaled_dot_product_attention(
+            Q, K, V,
+            attn_mask=attn_mask,
+            dropout_p=self.dropout.p if self.training else 0.0
+        )
+ 
+        attended = attended.transpose(1, 2).contiguous()
+        attended = attended.view(B, mol_len, self.hidden_size)
+ 
+        return self.out_proj(attended)
 
 
 class FeedForward(nn.Module):
@@ -78,26 +139,41 @@ class TransformerBlock(nn.Module):
     def __init__(self, hidden_size, num_heads, ffn_dim, dropout=0.1):
         super().__init__()
 
+        #Self-attention
         self.norm1     = nn.LayerNorm(hidden_size)
         self.attention = SelfAttention(hidden_size, num_heads, dropout)
 
+        # Cross-attention (text conditioning)
+        self.norm_cross      = nn.LayerNorm(hidden_size)
+        self.cross_attention = CrossAttention(hidden_size, num_heads, dropout)
+
+        #FFN
         self.norm2 = nn.LayerNorm(hidden_size)
         self.ffn   = FeedForward(hidden_size, ffn_dim, dropout)
 
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, padding_mask=None):
+    def forward(self, x, text_embeds, padding_mask=None, text_padding_mask=None):
         """
-        x:            (B, seq_len, hidden_size)
-        padding_mask: (B, seq_len) True where PAD tokens are
-        returns:      (B, seq_len, hidden_size)
+        x:                 (B, seq_len, hidden_size)   molecule hidden states
+        text_embeds:       (B, text_len, hidden_size)  projected text embeddings
+        padding_mask:      (B, seq_len)  True where molecule PAD tokens are
+        text_padding_mask: (B, text_len) True where text PAD tokens are
+        returns:           (B, seq_len, hidden_size)
         """
-        # --- Attention with residual ---
+        # --- Self- Attention with residual ---
         residual = x
         x = self.norm1(x)                        # normalize first
         x = self.attention(x, padding_mask)      # attend
         x = self.dropout(x)
         x = residual + x                         # add residual
+
+        # --- Cross-attention with residual ---
+        residual = x
+        x = self.norm_cross(x)
+        x = self.cross_attention(x, text_embeds, text_padding_mask)
+        x = self.dropout(x)
+        x = residual + x
 
         # --- FFN with residual ---
         residual = x
