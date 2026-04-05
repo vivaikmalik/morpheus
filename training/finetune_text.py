@@ -1,26 +1,24 @@
 """
 training/finetune_text.py
 --------------------------
-Fine-tunes the pretrained Morpheus model on CheBI-20 for
-text-conditioned molecule generation.
+Fine-tunes pretrained Morpheus on CheBI-20 for text-conditioned generation.
 
-Pipeline:
-  1. Load pretrained revealPad checkpoint (strict=False — new modules ignored)
-  2. New modules start from initialization:
-     - CrossAttention in each block (zero-init out_proj → no initial impact)
-     - SciBERT text encoder (frozen pretrained weights)
-     - Text projector MLP (random init, learnable)
-     - Null token for CFG (random init, learnable)
-  3. Fine-tune on CheBI-20 text→SELFIES pairs
-  4. Generate sample molecules with CFG at validation time
+The pretrained model has cross-attention acting as a 2nd self-attention
+(Q=molecule, K=molecule, V=molecule). During fine-tuning:
 
-Prerequisites:
-    python scripts/prepare_chebi20.py
+  - Cross-attention K and V projections adapt from molecule→text input
+  - Cross-attention Q and out_proj are FROZEN (transfer directly)
+  - All self-attention, FFN, embeddings, norms are FROZEN
+  - Text projector MLP and null token train from scratch
+  - SciBERT is frozen
+
+This is an extremely targeted fine-tune: only the K/V projections in each
+block need to learn "text looks like this instead of molecule." Everything
+else already works.
 
 Usage:
     python training/finetune_text.py
     python training/finetune_text.py --checkpoint checkpoints/best_model.pt
-    python training/finetune_text.py --lr 1e-4 --epochs 10
 """
 
 import sys
@@ -53,27 +51,28 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 # =============================================================================
 
 CONFIG = {
-    # Model (must match pretrained checkpoint for loadable weights)
+    # Model (must match pretrained checkpoint)
     "vocab_size"  : 110,
-    "hidden_size" : 256,
-    "num_heads"   : 8,
-    "ffn_dim"     : 512,
-    "num_layers"  : 8,
+    "hidden_size" : 768,
+    "num_heads"   : 12,
+    "ffn_dim"     : 3072,
+    "num_layers"  : 12,
     "max_length"  : 74,
     "dropout"     : 0.1,
 
     # Text conditioning
     "text_model"    : "allenai/scibert_scivocab_uncased",
-    "max_text_len"  : 256,     # max SciBERT tokens for text description
-    "uncond_prob"   : 0.1,     # CFG dropout probability
+    "max_text_len"  : 256,
+    "uncond_prob"   : 0.1,
 
     # Fine-tuning
-    "batch_size"    : 32,      # smaller than pretraining (text encoding is heavy)
-    "learning_rate" : 1e-4,    # lower than pretraining — we're fine-tuning
-    "weight_decay"  : 0.01,
-    "max_grad_norm" : 1.0,
-    "num_epochs"    : 10,
-    "warmup_ratio"  : 0.06,    # fraction of total steps for warmup
+    "batch_size"           : 64,
+    "gradient_accumulation": 4,
+    "learning_rate"        : 3e-5,     # can be aggressive (3e-4) — only K/V + projector train
+    "weight_decay"         : 0.01,
+    "max_grad_norm"        : 1.0,
+    "num_epochs"           : 15,
+    "warmup_ratio"         : 0.1,
 
     # Data
     "num_workers" : 0,
@@ -81,10 +80,10 @@ CONFIG = {
 
     # Logging & checkpoints
     "log_every"  : 50,
-    "val_every"  : 500,
-    "save_every" : 1000,
+    "val_every"  : 250,
+    "save_every" : 500,
 
-    # Generation (for validation samples)
+    # Generation
     "gen_steps"       : 32,
     "gen_temperature" : 1.0,
     "gen_num_mols"    : 4,
@@ -99,14 +98,13 @@ CONFIG = {
 
 
 # =============================================================================
-# LOSS FUNCTION (same as revealPad — with PAD downweighting)
+# LOSS FUNCTION
 # =============================================================================
 
 def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
     B, seq_len, vocab_size = logits.shape
     device = logits.device
 
-    # Downweight PAD predictions (revealPad strategy)
     vocab_weights = torch.ones(vocab_size, device=device)
     vocab_weights[pad_token_id] = 0.1
 
@@ -118,7 +116,6 @@ def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
         reduction='none'
     )
 
-    # Timestep weighting: weight more at low t (near clean)
     weights = (1.0 - timesteps)
     weights = weights.unsqueeze(1).expand(-1, seq_len, -1).reshape(-1)
 
@@ -132,7 +129,6 @@ def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
 # =============================================================================
 
 def run_validation(model, val_loader, device, max_batches=100):
-    """Run validation and return average loss."""
     model.eval()
     total_loss  = 0.0
     total_steps = 0
@@ -149,10 +145,7 @@ def run_validation(model, val_loader, device, max_batches=100):
             text_mask = batch["text_attention_mask"].to(device)
             text_pad  = batch["text_padding_mask"].to(device)
 
-            # Get text embeddings
             text_embeds = model.get_text_embeddings(text_ids, text_mask)
-
-            # Forward pass (no CFG dropout during validation)
             logits = model(input_ids, timesteps, text_embeds, text_pad)
             loss   = diffusion_loss(logits, labels, timesteps)
 
@@ -170,18 +163,14 @@ def run_validation(model, val_loader, device, max_batches=100):
 def generate_with_cfg(model, tokenizer, text_tokenizer, device,
                       prompts, cfg_scale=3.0, num_steps=32, temperature=1.0):
     """
-    Generate molecules from text prompts using classifier-free guidance.
-
-    CFG formula at each denoising step:
-        logits = logits_uncond + cfg_scale * (logits_cond - logits_uncond)
-
-    Higher cfg_scale = more text-faithful, less diverse.
+    CFG for cross-attention-as-self-attention pretraining:
+    - Conditioned: cross-attention attends to text embeddings
+    - Unconditioned: cross-attention attends to molecule states (pretraining mode)
     """
     model.eval()
     max_length = CONFIG["max_length"]
     B = len(prompts)
 
-    # --- Encode text prompts ---
     text_enc = text_tokenizer(
         prompts, padding=True, truncation=True,
         max_length=CONFIG["max_text_len"], return_tensors="pt",
@@ -193,7 +182,6 @@ def generate_with_cfg(model, tokenizer, text_tokenizer, device,
         )
     text_pad = (text_enc["attention_mask"] == 0)
 
-    # --- Start fully masked ---
     input_ids = torch.full(
         (B, max_length), tokenizer.mask_token_id,
         dtype=torch.long, device=device,
@@ -205,27 +193,22 @@ def generate_with_cfg(model, tokenizer, text_tokenizer, device,
         for step_idx, t_val in enumerate(t_vals):
             step_t = t_val.repeat(B).unsqueeze(-1)
 
-            # Conditional forward pass (with text)
+            # Conditioned: cross-attention attends to text
             logits_cond = model(input_ids, step_t, text_embeds, text_pad)
 
-            # Unconditional forward pass (null token)
+            # Unconditioned: cross-attention attends to molecule (text_embeds=None)
             logits_uncond = model(input_ids, step_t, None, None)
 
             # CFG interpolation
             logits = logits_uncond + cfg_scale * (logits_cond - logits_uncond)
 
-            # Block MASK from being a final output
             if step_idx < num_steps - 1:
                 logits[:, :, tokenizer.mask_token_id] = float('-inf')
 
-            # Sample
-            scaled_logits = logits / temperature
-            probs   = torch.softmax(scaled_logits, dim=-1)
+            probs   = torch.softmax(logits / temperature, dim=-1)
             sampled = torch.distributions.Categorical(probs=probs).sample()
 
-            # Confidence-based re-masking (except on last step)
             confidence = torch.gather(probs, 2, sampled.unsqueeze(-1)).squeeze(-1)
-
             alpha_t     = (torch.cos(t_val * torch.pi / 2) ** 2).item()
             num_to_mask = int((1.0 - alpha_t) * max_length)
 
@@ -243,12 +226,10 @@ def generate_with_cfg(model, tokenizer, text_tokenizer, device,
 
 def generate_and_log(model, tokenizer, text_tokenizer, device, step,
                      val_df=None):
-    """Generate sample molecules and print/log results."""
-    # Pick some prompts from validation set
     if val_df is not None and len(val_df) >= CONFIG["gen_num_mols"]:
         sample_df = val_df.sample(n=CONFIG["gen_num_mols"], random_state=step)
-        prompts      = sample_df["description"].tolist()
-        gt_selfies   = sample_df["selfies"].tolist()
+        prompts    = sample_df["description"].tolist()
+        gt_selfies = sample_df["selfies"].tolist()
     else:
         prompts = [
             "The molecule is a member of the class of pyrimidines.",
@@ -258,16 +239,12 @@ def generate_and_log(model, tokenizer, text_tokenizer, device, step,
         ][:CONFIG["gen_num_mols"]]
         gt_selfies = [None] * len(prompts)
 
-    # Generate
     raw_ids = generate_with_cfg(
         model, tokenizer, text_tokenizer, device,
-        prompts,
-        cfg_scale=CONFIG["cfg_scale"],
-        num_steps=CONFIG["gen_steps"],
-        temperature=CONFIG["gen_temperature"],
+        prompts, cfg_scale=CONFIG["cfg_scale"],
+        num_steps=CONFIG["gen_steps"], temperature=CONFIG["gen_temperature"],
     )
 
-    # Decode and analyze
     print(f"\n{'='*70}")
     print(f"  GENERATED MOLECULES — Step {step}")
     print(f"{'='*70}")
@@ -275,16 +252,13 @@ def generate_and_log(model, tokenizer, text_tokenizer, device, step,
     valid_count = 0
     for i in range(len(prompts)):
         ids = raw_ids[i].cpu().tolist()
-
-        # Truncate at EOS
         if tokenizer.eos_token_id in ids:
             ids = ids[:ids.index(tokenizer.eos_token_id)]
 
         selfies_str = tokenizer.decode(ids)
-
         try:
             smiles = sf.decoder(selfies_str)
-            mol    = Chem.MolFromSmiles(smiles)
+            mol = Chem.MolFromSmiles(smiles)
             if mol is not None:
                 canonical = Chem.MolToSmiles(mol)
                 logp  = round(Descriptors.MolLogP(mol), 2)
@@ -296,11 +270,9 @@ def generate_and_log(model, tokenizer, text_tokenizer, device, step,
         except Exception as e:
             print(f"  [{i}] ❌ Error: {e}")
 
-        # Show prompt (truncated)
         prompt_short = prompts[i][:70] + ("..." if len(prompts[i]) > 70 else "")
         print(f"       Prompt: {prompt_short}")
 
-        # Show ground truth if available
         if gt_selfies[i] is not None:
             try:
                 gt_smiles = sf.decoder(gt_selfies[i])
@@ -320,23 +292,12 @@ def generate_and_log(model, tokenizer, text_tokenizer, device, step,
 # =============================================================================
 
 def load_pretrained(model, checkpoint_path, device):
-    """
-    Load pretrained weights with strict=False.
-
-    What loads:    token_embedding, pos_embedding, timestep_embedding,
-                   input_norm, blocks.*.norm1, blocks.*.attention.*,
-                   blocks.*.norm2, blocks.*.ffn.*, output_norm, lm_head
-    What's new:    text_encoder (frozen pretrained SciBERT — not from our ckpt),
-                   text_proj, null_token,
-                   blocks.*.norm_cross, blocks.*.cross_attention.*
-    """
     print(f"Loading pretrained checkpoint: {checkpoint_path}")
 
     checkpoint = torch.load(checkpoint_path, map_location=device,
                             weights_only=False)
     pretrained_state = checkpoint["model"]
 
-    # Load with strict=False — missing keys are expected (new modules)
     missing, unexpected = model.load_state_dict(pretrained_state, strict=False)
 
     print(f"  Trained for {checkpoint.get('step', '?'):,} steps "
@@ -348,13 +309,71 @@ def load_pretrained(model, checkpoint_path, device):
     if unexpected:
         print(f"  WARNING — unexpected keys: {unexpected[:5]}...")
 
-    # Sanity check: cross-attention keys should be in missing
-    cross_attn_missing = [k for k in missing if "cross_attention" in k]
-    text_missing       = [k for k in missing if "text_" in k or "null_token" in k]
-    print(f"  Cross-attention keys (new): {len(cross_attn_missing)}")
+    # All cross-attention weights should LOAD (they were pretrained)
+    cross_loaded = [k for k in pretrained_state if "cross_attention" in k and k not in unexpected]
+    text_missing = [k for k in missing if "text_" in k or "null_token" in k]
+    print(f"  Cross-attention keys loaded: {len(cross_loaded)} (pretrained as 2nd self-attn)")
     print(f"  Text encoder/proj keys (new): {len(text_missing)}")
 
     return checkpoint.get("config", {})
+
+
+# =============================================================================
+# FREEZE STRATEGY
+# =============================================================================
+
+def setup_freeze(model):
+    """
+    Freeze everything except:
+      - cross_attention.k_proj  (adapt molecule→text input)
+      - cross_attention.v_proj  (adapt molecule→text input)
+      - text_proj               (learn SciBERT→model alignment)
+      - null_token              (for CFG)
+      - norm_cross              (adapt to new cross-attn distribution)
+
+    Everything else transfers directly from pretraining:
+      - self-attention (Q,K,V,out_proj) — unchanged
+      - cross_attention.q_proj — already knows how to query from molecule states
+      - cross_attention.out_proj — already knows how to project back
+      - FFN — unchanged
+      - embeddings, norms — unchanged
+      - SciBERT — frozen always
+    """
+    trainable_keywords = [
+        "cross_attention.k_proj",
+        "cross_attention.v_proj",
+        "text_proj",
+        "null_token",
+        "norm_cross",
+    ]
+
+    trainable_count = 0
+    frozen_count = 0
+
+    for name, param in model.named_parameters():
+        should_train = any(kw in name for kw in trainable_keywords)
+
+        if should_train:
+            param.requires_grad = True
+            trainable_count += 1
+        else:
+            param.requires_grad = False
+            frozen_count += 1
+
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+
+    print(f"\n  Freeze strategy:")
+    print(f"    Trainable param groups: {trainable_count}")
+    print(f"    Frozen param groups:    {frozen_count}")
+    print(f"    Trainable params:       {trainable_params:,}")
+    print(f"    Total params:           {total_params:,}")
+    print(f"    Training ratio:         {trainable_params/total_params:.1%}")
+
+    print(f"\n  Trainable parameters:")
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(f"    {name:60s}  {param.numel():>10,}")
 
 
 # =============================================================================
@@ -362,7 +381,6 @@ def load_pretrained(model, checkpoint_path, device):
 # =============================================================================
 
 def train(args):
-    # --- Seed everything ---
     random.seed(CONFIG["seed"])
     np.random.seed(CONFIG["seed"])
     torch.manual_seed(CONFIG["seed"])
@@ -416,7 +434,7 @@ def train(args):
         num_workers=CONFIG["num_workers"], pin_memory=True,
     )
 
-    # --- Build model ---
+    # --- Build model WITH SciBERT ---
     print(f"\nBuilding model with SciBERT ({CONFIG['text_model']})...")
     model = MolecularDiffusionModel(
         vocab_size      = CONFIG["vocab_size"],
@@ -431,24 +449,23 @@ def train(args):
         dropout         = CONFIG["dropout"],
     ).to(device)
 
-    # --- Load pretrained weights ---
+    # --- Load pretrained weights (including cross-attention!) ---
     load_pretrained(model, args.checkpoint, device)
 
-    total, trainable, frozen = model.count_parameters()
-    print(f"\nParameters: {total:,} total | {trainable:,} trainable | "
-          f"{frozen:,} frozen (SciBERT)")
+    # --- Freeze strategy: only K/V + text_proj + null_token train ---
+    setup_freeze(model)
 
     # --- Optimizer (only trainable params) ---
+    acc_steps = CONFIG["gradient_accumulation"]
+    steps_per_epoch = len(train_loader) // acc_steps
+    total_steps = steps_per_epoch * CONFIG["num_epochs"]
+    warmup_steps = int(total_steps * CONFIG["warmup_ratio"])
+
     optimizer = AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
+        [p for p in model.parameters() if p.requires_grad],
         lr=CONFIG["learning_rate"],
         weight_decay=CONFIG["weight_decay"],
     )
-
-    # --- Scheduler ---
-    steps_per_epoch = len(train_loader)
-    total_steps     = steps_per_epoch * CONFIG["num_epochs"]
-    warmup_steps    = int(total_steps * CONFIG["warmup_ratio"])
 
     scheduler = get_cosine_schedule_with_warmup(
         optimizer,
@@ -456,7 +473,7 @@ def train(args):
         num_training_steps=total_steps,
     )
 
-    print(f"Steps per epoch: {steps_per_epoch:,}")
+    print(f"\nSteps per epoch: {steps_per_epoch:,}")
     print(f"Total steps:     {total_steps:,}")
     print(f"Warmup steps:    {warmup_steps:,}")
 
@@ -471,8 +488,7 @@ def train(args):
     for epoch in range(CONFIG["num_epochs"]):
         print(f"\n--- Epoch {epoch + 1}/{CONFIG['num_epochs']} ---")
 
-        for batch in train_loader:
-            # Move to device
+        for step_idx, batch in enumerate(train_loader):
             input_ids = batch["input_ids"].to(device)
             labels    = batch["labels"].to(device)
             timesteps = batch["timesteps"].to(device)
@@ -480,78 +496,76 @@ def train(args):
             text_mask = batch["text_attention_mask"].to(device)
             text_pad  = batch["text_padding_mask"].to(device)
 
-            # Get text embeddings (SciBERT is frozen, projector is trainable)
-            text_embeds = model.get_text_embeddings(text_ids, text_mask)
+            with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                text_embeds = model.get_text_embeddings(text_ids, text_mask)
+                logits = model(input_ids, timesteps, text_embeds, text_pad)
+                loss = diffusion_loss(logits, labels, timesteps)
+                loss = loss / acc_steps
 
-            # Forward pass (CFG dropout happens inside model.forward)
-            logits = model(input_ids, timesteps, text_embeds, text_pad)
-            loss   = diffusion_loss(logits, labels, timesteps)
-
-            # Backward
-            optimizer.zero_grad()
             loss.backward()
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                filter(lambda p: p.requires_grad, model.parameters()),
-                CONFIG["max_grad_norm"]
-            )
-            optimizer.step()
-            scheduler.step()
 
-            global_step += 1
-
-            # --- Logging ---
-            if global_step % CONFIG["log_every"] == 0:
-                lr = scheduler.get_last_lr()[0]
-                print(f"Step {global_step:>6} | "
-                      f"loss: {loss.item():.4f} | "
-                      f"grad_norm: {grad_norm:.4f} | "
-                      f"lr: {lr:.2e}")
-                wandb.log({
-                    "train/loss"     : loss.item(),
-                    "train/grad_norm": float(grad_norm),
-                    "train/lr"       : lr,
-                    "train/epoch"    : epoch + 1,
-                }, step=global_step)
-
-            # --- Validation + generation ---
-            if global_step % CONFIG["val_every"] == 0:
-                val_loss = run_validation(model, val_loader, device)
-                print(f"  → Val loss: {val_loss:.4f}")
-                wandb.log({"val/loss": val_loss}, step=global_step)
-
-                # Generate samples
-                generate_and_log(
-                    model, mol_tokenizer, text_tokenizer,
-                    device, global_step, val_df
+            if (step_idx + 1) % acc_steps == 0:
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    [p for p in model.parameters() if p.requires_grad],
+                    CONFIG["max_grad_norm"]
                 )
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+                global_step += 1
 
-                # Save best
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    save_path = checkpoint_dir / "best_finetuned_model.pt"
+                # --- Logging ---
+                if global_step % CONFIG["log_every"] == 0:
+                    lr = scheduler.get_last_lr()[0]
+                    actual_loss = loss.item() * acc_steps
+                    print(f"Step {global_step:>6} | "
+                          f"loss: {actual_loss:.4f} | "
+                          f"grad: {grad_norm:.4f} | "
+                          f"lr: {lr:.2e}")
+                    wandb.log({
+                        "train/loss"     : actual_loss,
+                        "train/grad_norm": float(grad_norm),
+                        "train/lr"       : lr,
+                        "train/epoch"    : epoch + (step_idx / len(train_loader)),
+                    }, step=global_step)
+
+                # --- Validation + generation ---
+                if global_step % CONFIG["val_every"] == 0:
+                    val_loss = run_validation(model, val_loader, device)
+                    print(f"  → Val loss: {val_loss:.4f}")
+                    wandb.log({"val/loss": val_loss}, step=global_step)
+
+                    generate_and_log(
+                        model, mol_tokenizer, text_tokenizer,
+                        device, global_step, val_df
+                    )
+
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
+                        save_path = checkpoint_dir / "best_finetuned_model.pt"
+                        torch.save({
+                            "step"      : global_step,
+                            "epoch"     : epoch + 1,
+                            "model"     : model.state_dict(),
+                            "optimizer" : optimizer.state_dict(),
+                            "scheduler" : scheduler.state_dict(),
+                            "val_loss"  : val_loss,
+                            "config"    : CONFIG,
+                        }, save_path)
+                        print(f"  ✅ New best model (val_loss: {val_loss:.4f})")
+
+                # --- Periodic checkpoint ---
+                if global_step % CONFIG["save_every"] == 0:
+                    save_path = checkpoint_dir / f"finetune_step{global_step}.pt"
                     torch.save({
-                        "step"      : global_step,
-                        "epoch"     : epoch + 1,
-                        "model"     : model.state_dict(),
-                        "optimizer" : optimizer.state_dict(),
-                        "scheduler" : scheduler.state_dict(),
-                        "val_loss"  : val_loss,
-                        "config"    : CONFIG,
+                        "step"     : global_step,
+                        "epoch"    : epoch + 1,
+                        "model"    : model.state_dict(),
+                        "optimizer": optimizer.state_dict(),
+                        "scheduler": scheduler.state_dict(),
+                        "config"   : CONFIG,
                     }, save_path)
-                    print(f"  ✅ New best model (val_loss: {val_loss:.4f})")
-
-            # --- Periodic checkpoint ---
-            if global_step % CONFIG["save_every"] == 0:
-                save_path = checkpoint_dir / f"finetune_step{global_step}.pt"
-                torch.save({
-                    "step"     : global_step,
-                    "epoch"    : epoch + 1,
-                    "model"    : model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                    "scheduler": scheduler.state_dict(),
-                    "config"   : CONFIG,
-                }, save_path)
-                print(f"  💾 Checkpoint saved at step {global_step}")
+                    print(f"  💾 Checkpoint saved at step {global_step}")
 
     print(f"\nTraining complete. Best val loss: {best_val_loss:.4f}")
     wandb.finish()
@@ -568,14 +582,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--checkpoint",
         default=CONFIG["pretrained_checkpoint"],
-        help="Path to pretrained revealPad checkpoint"
+        help="Path to pretrained checkpoint (with cross-attention)"
     )
-    parser.add_argument("--lr", type=float, default=None,
-                        help="Override learning rate")
-    parser.add_argument("--epochs", type=int, default=None,
-                        help="Override number of epochs")
-    parser.add_argument("--batch_size", type=int, default=None,
-                        help="Override batch size")
+    parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--batch_size", type=int, default=None)
 
     args = parser.parse_args()
 
