@@ -20,7 +20,7 @@ from training.diffusionCollator import ConditionalDiffusionCollator
 from model.molecularDiffusionModel import MolecularDiffusionModel
 
 # =============================================================================
-# CONFIG
+# CONFIG — 1024/16/4096/12 (matches TGM-DLM architecture)
 # =============================================================================
 CONFIG = {
     # Model
@@ -38,11 +38,11 @@ CONFIG = {
     # Training
     "batch_size"           : 128,
     "gradient_accumulation": 2,
-    "learning_rate"        : 5e-5,
+    "learning_rate"        : 5e-5,     # matches TGM-DLM exactly
     "weight_decay"         : 0.01,
     "max_grad_norm"        : 1.0,
-    "num_epochs"           : 55,
-    "warmup_steps"         : 7700,
+    "num_epochs"           : 35,       # ~32K steps, should converge by 20-25K
+    "warmup_steps"         : 3000,
 
     # Data
     "val_fraction" : 0.05,
@@ -323,7 +323,6 @@ def train():
             timesteps = batch["timesteps"].to(device)
 
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-                # text_embeds=None → cross-attention uses x (2nd self-attention)
                 logits = model(input_ids, timesteps)
                 loss   = diffusion_loss(logits, labels, timesteps)
                 loss   = loss / acc_steps
