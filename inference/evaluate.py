@@ -17,7 +17,7 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 # CONFIGURATION
 # =============================================================================
 
-CHECKPOINT_PATH = Path(__file__).parent.parent / "checkpoints" / "best_model.pt"
+CHECKPOINT_PATH = Path(__file__).parent.parent / "checkpoints" / "zinc_5M_pretrain.pt"
 TOKENIZER_PATH  = Path(__file__).parent.parent / "chemical_tokenizer.json"
 OUTPUT_PATH     = Path(__file__).parent.parent / "outputs" / "generated_molecules.csv"
 

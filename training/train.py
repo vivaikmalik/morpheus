@@ -390,7 +390,7 @@ def train():
 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
-                    save_path = checkpoint_dir / "best_model.pt"
+                    save_path = checkpoint_dir / "zinc_5M_pretrain.pt"
                     torch.save({
                         "step"      : global_step,
                         "epoch"     : epoch + 1,

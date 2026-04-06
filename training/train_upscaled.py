@@ -760,7 +760,7 @@ def train():
         # --- Best-model checkpoint ---
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            save_path     = checkpoint_dir / "best_model_upscaled.pt"
+            save_path     = checkpoint_dir / "zinc_17M_pretrain.pt"
             torch.save({
                 "model"    : model.state_dict(),
                 "config"   : checkpoint_config,
@@ -789,7 +789,7 @@ def train():
     print(f"  Pretraining complete.")
     print(f"  Best val loss : {best_val_loss:.4f}")
     print(f"  Log saved     : {log_path}")
-    print(f"  Checkpoint    : {checkpoint_dir}/best_model_upscaled.pt")
+    print(f"  Checkpoint    : {checkpoint_dir}/zinc_17M_pretrain.pt")
     print(f"{'='*70}")
 
     # --- Save plots ---

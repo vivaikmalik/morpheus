@@ -2,16 +2,16 @@
   ChEBI-20 EVALUATION — Morpheus 27M
   Checkpoint : best_chebi20_model.pt
   Test set   : 2542 molecules
-  CFG scale  : 3.0  Temperature: 1.0  Steps: 50
+  CFG scale  : 1.0  Temperature: 0.8  Steps: 50
 =================================================================
   Validity (%)                     100.0%
   Exact Match (%)                    0.0%
-  BLEU-2                          0.3811
-  BLEU-4                          0.2689
-  Levenshtein Similarity          0.3544
-  Morgan FP Tanimoto (valid)      0.1587
-  MACCS FP Tanimoto  (valid)      0.4617
-  RDK FP Tanimoto    (valid)      0.2477
+  BLEU-2                          0.4232
+  BLEU-4                          0.3176
+  Levenshtein Similarity          0.3640
+  Morgan FP Tanimoto (valid)      0.1877
+  MACCS FP Tanimoto  (valid)      0.5124
+  RDK FP Tanimoto    (valid)      0.3004
 =================================================================
 
 Reference: TGM-DLM (AAAI 2024) on ChEBI-20

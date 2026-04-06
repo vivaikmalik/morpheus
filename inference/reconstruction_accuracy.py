@@ -30,7 +30,7 @@ from dataExtractor.conditionalSELFIESDataset import ConditionalSELFIESDataset
 from model.molecularDiffusionModel import MolecularDiffusionModel
 
 # ── constants ────────────────────────────────────────────────────────────────
-CHECKPOINT   = ROOT / "checkpoints" / "best_model.pt"
+CHECKPOINT   = ROOT / "checkpoints" / "zinc_5M_pretrain.pt"
 TOKENIZER    = ROOT / "chemical_tokenizer.json"
 OUTPUT_PLOT  = ROOT / "outputs" / "reconstruction_accuracy.png"
 NOISE_LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]

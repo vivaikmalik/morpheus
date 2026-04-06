@@ -11,7 +11,7 @@ the REINFORCE gradient theoretically sound.
 Usage
 -----
     python training/rl_reinforce_v2.py \\
-        --checkpoint checkpoints/best_model.pt \\
+        --checkpoint checkpoints/zinc_5M_pretrain.pt \\
         --num_steps  200  \\
         --batch_size 32   \\
         --gen_steps  15   \\
@@ -369,7 +369,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="REINFORCE v2 — per-step log-prob accumulation"
     )
-    parser.add_argument("--checkpoint",       default="checkpoints/best_model.pt",
+    parser.add_argument("--checkpoint",       default="checkpoints/zinc_5M_pretrain.pt",
                         help="Path to pretrained checkpoint (relative to project root)")
     parser.add_argument("--num_steps",        type=int,   default=500)
     parser.add_argument("--batch_size",       type=int,   default=32)

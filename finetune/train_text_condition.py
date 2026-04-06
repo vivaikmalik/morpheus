@@ -98,7 +98,7 @@ def _load_contrastive_text_encoder(config, device):
             "Set CONFIG['contrastive_ckpt_path'] or CONFIG['contrastive_artifact']."
         )
 
-    ckpt = torch.load(ckpt_path, map_location="cpu")
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     text_state = {
         k[len("text_model."):]: v
         for k, v in ckpt["model_state"].items()
@@ -489,17 +489,17 @@ def train():
     print(f"Parameters: {total:,} total | {trainable:,} trainable (Text encoder is frozen)")
 
     # LOAD BEST PRE-TRAINED MODEL
-    best_model_path = os.path.join(checkpoint_dir, "best_model_upscaled.pt")
+    best_model_path = os.path.join(checkpoint_dir, "zinc_17M_pretrain.pt")
     if os.path.exists(best_model_path):
         print(f"Loading pre-trained weights from {best_model_path}...")
         checkpoint = torch.load(best_model_path, map_location=device)
-        
+
         missing_keys, unexpected_keys = model.load_state_dict(checkpoint["model"], strict=False)
-        
+
         print(f"Missing keys (expected - new layers): {len(missing_keys)}")
         print(f"Unexpected keys: {len(unexpected_keys)}")
     else:
-        print("WARNING: best_model.pt not found. Training from scratch.")
+        print("WARNING: zinc_17M_pretrain.pt not found. Training from scratch.")
 
     if CONFIG.get("contrastive_ckpt_path") or CONFIG.get("contrastive_artifact"):
         model.text_encoder = _load_contrastive_text_encoder(CONFIG, device)
@@ -615,7 +615,7 @@ def train():
                 if val_loss < best_val_loss:
                     best_val_loss    = val_loss
                     patience_counter = 0
-                    ckpt_path = checkpoint_dir / "best_finetuned_model.pt"
+                    ckpt_path = checkpoint_dir / "molinst_27M_frozen.pt"
                     torch.save({
                         "epoch"    : epoch + 1,
                         "step"     : global_step,
@@ -645,7 +645,7 @@ def train():
 
         # Periodic checkpoint every 3 epochs
         if (epoch + 1) % 3 == 0:
-            save_path = checkpoint_dir / f"finetuned_epoch_{epoch+1}.pt"
+            save_path = checkpoint_dir / f"molinst_27M_frozen_epoch{epoch+1}.pt"
             torch.save({
                 "epoch"    : epoch + 1,
                 "step"     : global_step,

@@ -273,17 +273,17 @@ def train():
     # ==========================================================
     # LOAD BEST PRE-TRAINED MODEL
     # ==========================================================
-    best_model_path = os.path.join(checkpoint_dir, "best_model.pt")
+    best_model_path = os.path.join(checkpoint_dir, "zinc_5M_pretrain.pt")
     if os.path.exists(best_model_path):
         print(f"Loading pre-trained weights from {best_model_path}...")
         checkpoint = torch.load(best_model_path, map_location=device)
-        
+
         missing_keys, unexpected_keys = model.load_state_dict(checkpoint["model"], strict=False)
-        
+
         print(f"Missing keys (expected - new layers): {len(missing_keys)}")
         print(f"Unexpected keys: {len(unexpected_keys)}")
     else:
-        print("WARNING: best_model.pt not found. Training from scratch.")
+        print("WARNING: zinc_5M_pretrain.pt not found. Training from scratch.")
 
     optimizer = AdamW([p for p in model.parameters() if p.requires_grad],
                       lr=CONFIG["learning_rate"], weight_decay=CONFIG["weight_decay"])
@@ -351,7 +351,7 @@ def train():
                 if val_loss < best_val_loss:
                     best_val_loss    = val_loss
                     patience_counter = 0
-                    ckpt_path = checkpoint_dir / "best_finetuned_model.pt"
+                    ckpt_path = checkpoint_dir / "molinst_27M_frozen.pt"
                     torch.save({
                         "step": global_step,
                         "model": model.state_dict(),

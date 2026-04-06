@@ -7,7 +7,7 @@ with TGM-DLM (AAAI 2024).
 Pipeline:
   1. Download ChEBI-20 (liupf/ChEBI-20-MM) via HuggingFace datasets.
   2. Convert SMILES → SELFIES, filter for tokenizer vocab + max length.
-  3. Fine-tune from checkpoints/best_model_upscaled.pt (Stage 1 pretrain).
+  3. Fine-tune from checkpoints/zinc_17M_pretrain.pt (Stage 1 pretrain).
   4. After training, auto-evaluate on test set with TGM-DLM metrics.
 
 Usage:
@@ -15,11 +15,11 @@ Usage:
 
 Outputs:
     data/chebi20_train.csv, data/chebi20_val.csv, data/chebi20_test.csv
-    checkpoints/best_chebi20_model.pt
+    checkpoints/chebi20_{size}_{encoder}.pt
     outputs/chebi20_log.csv
     outputs/plots/chebi20/loss_curves.png, lr_schedule.png
-    outputs/chebi20_eval.csv
-    outputs/chebi20_eval_summary.txt
+    outputs/chebi20_{size}_{encoder}_eval_cfg*_t*_s*.csv
+    outputs/chebi20_{size}_{encoder}_eval_summary_cfg*_t*_s*.txt
 """
 
 import csv
@@ -61,7 +61,7 @@ from tokenizer.chemicalTokenizer import ChemicalTokenizer
 PROJECT_ROOT = Path(__file__).parent.parent
 
 CONFIG = {
-    # Model architecture (must match best_model_upscaled.pt)
+    # Model architecture (must match zinc_17M_pretrain.pt)
     "vocab_size"  : 110,
     "hidden_size" : 512,
     "num_heads"   : 8,
@@ -108,20 +108,63 @@ CONFIG = {
     "val_csv"         : str(PROJECT_ROOT / "data" / "chebi20_val.csv"),
     "test_csv"        : str(PROJECT_ROOT / "data" / "chebi20_test.csv"),
 
-    # Paths
-    "pretrain_ckpt"   : str(PROJECT_ROOT / "checkpoints" / "best_model_upscaled.pt"),
-    "save_ckpt"       : str(PROJECT_ROOT / "checkpoints" / "best_chebi20_model.pt"),
+    # Paths (updated at runtime by _apply_run_config when --encoder/--model_size are set)
+    "pretrain_ckpt"   : str(PROJECT_ROOT / "checkpoints" / "zinc_17M_pretrain.pt"),
+    "save_ckpt"       : str(PROJECT_ROOT / "checkpoints" / "chebi20_27M_frozen.pt"),
     "periodic_prefix" : str(PROJECT_ROOT / "checkpoints" / "chebi20_epoch"),
     "log_path"        : str(PROJECT_ROOT / "outputs" / "chebi20_log.csv"),
     "plot_dir"        : str(PROJECT_ROOT / "outputs" / "plots" / "chebi20"),
-    "eval_csv"        : str(PROJECT_ROOT / "outputs" / "chebi20_eval.csv"),
-    "eval_summary"    : str(PROJECT_ROOT / "outputs" / "chebi20_eval_summary.txt"),
+    "eval_csv"        : str(PROJECT_ROOT / "outputs" / "chebi20_27M_frozen_eval.csv"),
+    "eval_summary"    : str(PROJECT_ROOT / "outputs" / "chebi20_27M_frozen_eval_summary.txt"),
+
+    # Run identity (overridden by --encoder / --model_size CLI flags)
+    "encoder"    : "frozen",
+    "model_size" : "27M",
 
     "num_workers" : 0,
     "seed"        : 42,
     "log_every"   : 50,
     "freeze_text_encoder": True,
 }
+
+
+# =============================================================================
+# ENCODER HELPERS
+# =============================================================================
+
+def _apply_run_config(model_size: str, encoder: str):
+    """Update CONFIG paths to reflect --model_size and --encoder values."""
+    CONFIG["model_size"] = model_size
+    CONFIG["encoder"]    = encoder
+    stem = f"chebi20_{model_size}_{encoder}"
+    CONFIG["save_ckpt"]       = str(PROJECT_ROOT / "checkpoints" / f"{stem}.pt")
+    CONFIG["periodic_prefix"] = str(PROJECT_ROOT / "checkpoints" / f"{stem}_epoch")
+    CONFIG["eval_csv"]        = str(PROJECT_ROOT / "outputs" / f"{stem}_eval.csv")
+    CONFIG["eval_summary"]    = str(PROJECT_ROOT / "outputs" / f"{stem}_eval_summary.txt")
+
+
+def _load_contrastive_text_encoder(device):
+    """Load the fine-tuned text encoder from checkpoints/contrastive_text_selfies.pt."""
+    ckpt_path = PROJECT_ROOT / "checkpoints" / "contrastive_text_selfies.pt"
+    if not ckpt_path.exists():
+        raise FileNotFoundError(
+            f"Contrastive checkpoint not found: {ckpt_path}\n"
+            "Train the contrastive aligner first (contrastive/ notebook)."
+        )
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    text_state = {
+        k[len("text_model."):]: v
+        for k, v in ckpt["model_state"].items()
+        if k.startswith("text_model.")
+    }
+    assert text_state, "No 'text_model.*' keys found in contrastive checkpoint."
+    from transformers import AutoModel
+    encoder = AutoModel.from_pretrained(CONFIG["text_model"])
+    encoder.load_state_dict(text_state, strict=True)
+    print(f"[encoder] contrastive (from {ckpt_path.name}  "
+          f"epoch={ckpt.get('epoch','?')}  "
+          f"best_val_loss={ckpt.get('best_val_loss', float('nan')):.4f})")
+    return encoder.to(device)
 
 
 # =============================================================================
@@ -513,7 +556,10 @@ def _fp_tanimoto(mol_a, mol_b, fp_type: str) -> float:
 
 
 def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
-                      eos_truncate: bool = False):
+                      eos_truncate: bool = False,
+                      cfg_scale: float = None,
+                      temperature: float = None,
+                      num_steps: int = None):
     """
     Generate molecules for all ChEBI-20 test prompts and compute TGM-DLM metrics.
     Saves per-row CSV + summary text file.
@@ -523,11 +569,14 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
                       sequence at the position with highest EOS probability before
                       decoding.  Useful for diagnosing EOS-length issues.
     """
+    cfg_scale   = cfg_scale   if cfg_scale   is not None else CONFIG["eval_cfg_scale"]
+    temperature = temperature if temperature is not None else CONFIG["eval_temperature"]
+    num_steps   = num_steps   if num_steps   is not None else CONFIG["eval_steps"]
+
     eost_tag = " [eos_truncate]" if eos_truncate else ""
     print(f"\n{'='*65}")
     print(f"  TEST SET EVALUATION{eost_tag} — {test_csv.name}")
-    print(f"  cfg={CONFIG['eval_cfg_scale']}  T={CONFIG['eval_temperature']}  "
-          f"steps={CONFIG['eval_steps']}")
+    print(f"  cfg={cfg_scale}  T={temperature}  steps={num_steps}")
     print(f"{'='*65}")
 
     df_test = pd.read_csv(test_csv)
@@ -544,9 +593,9 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
         batch_ids = _generate_cfg_batch(
             model, tokenizer, hf_tokenizer,
             prompts[b*bs : (b+1)*bs], device,
-            cfg_scale=CONFIG["eval_cfg_scale"],
-            temperature=CONFIG["eval_temperature"],
-            num_steps=CONFIG["eval_steps"],
+            cfg_scale=cfg_scale,
+            temperature=temperature,
+            num_steps=num_steps,
         )
         all_gen_ids.extend(batch_ids)
 
@@ -616,9 +665,12 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
 
     df_out = pd.DataFrame(rows)
 
-    # Save per-row CSV — add _eost suffix when eos_truncate is on
+    # Save per-row CSV — encode cfg/temp/steps + optional _eost in filename
+    tag = f"_cfg{cfg_scale}_t{temperature}_s{num_steps}"
+    if eos_truncate:
+        tag += "_eost"
     base_csv = Path(CONFIG["eval_csv"])
-    out_csv  = base_csv.with_stem(base_csv.stem + ("_eost" if eos_truncate else ""))
+    out_csv  = base_csv.with_stem(base_csv.stem + tag)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     df_out.to_csv(out_csv, index=False)
     print(f"\n  Per-row results → {out_csv}")
@@ -639,14 +691,15 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
     rdk_avg    = valid_rows["rdk_sim"].mean()    if n_valid else float("nan")
 
     eost_label = " + EOS truncation" if eos_truncate else ""
+    run_tag = f"{CONFIG['model_size']} [{CONFIG['encoder']}]"
     summary_lines = [
         "=" * 65,
-        f"  ChEBI-20 EVALUATION — Morpheus 27M{eost_label}",
+        f"  ChEBI-20 EVALUATION — Morpheus {run_tag}{eost_label}",
         f"  Checkpoint : {Path(CONFIG['save_ckpt']).name}",
         f"  Test set   : {n} molecules",
-        f"  CFG scale  : {CONFIG['eval_cfg_scale']}  "
-        f"Temperature: {CONFIG['eval_temperature']}  "
-        f"Steps: {CONFIG['eval_steps']}",
+        f"  CFG scale  : {cfg_scale}  "
+        f"Temperature: {temperature}  "
+        f"Steps: {num_steps}",
         "=" * 65,
         f"  Validity (%)                  {validity_pct:>8.1f}%",
         f"  Exact Match (%)               {exact_pct:>8.1f}%",
@@ -667,7 +720,7 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
     print("\n" + "\n".join(summary_lines))
 
     base_txt = Path(CONFIG["eval_summary"])
-    out_txt  = base_txt.with_stem(base_txt.stem + ("_eost" if eos_truncate else ""))
+    out_txt  = base_txt.with_stem(base_txt.stem + tag)
     with open(out_txt, "w") as f:
         f.write("\n".join(summary_lines) + "\n")
     print(f"\n  Summary → {out_txt}")
@@ -793,6 +846,10 @@ def train():
         print(f"        missing={len(missing)}  unexpected={len(unexpected)}")
     else:
         print(f"[ckpt]  WARNING: {pretrain_ckpt} not found — training from scratch.")
+
+    # Swap in contrastive text encoder if requested
+    if CONFIG.get("encoder") == "contrastive":
+        model.text_encoder = _load_contrastive_text_encoder(device)
 
     # Freeze / unfreeze text encoder
     frozen = CONFIG["freeze_text_encoder"]
@@ -966,12 +1023,26 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Train or evaluate Morpheus on ChEBI-20")
     parser.add_argument("--eval_only", action="store_true",
-                        help="Skip training; load best_chebi20_model.pt and run "
+                        help="Skip training; load chebi20_{model_size}_{encoder}.pt and run "
                              "evaluate_test_set on data/chebi20_test.csv")
     parser.add_argument("--eos_truncate", action="store_true",
                         help="Apply post-hoc EOS truncation during evaluation "
                              "(requires --eval_only or runs after normal training)")
+    parser.add_argument("--cfg", type=float, default=None,
+                        help="CFG scale for generation (default: CONFIG eval_cfg_scale=3.0)")
+    parser.add_argument("--temp", type=float, default=None,
+                        help="Sampling temperature (default: CONFIG eval_temperature=1.0)")
+    parser.add_argument("--steps", type=int, default=None,
+                        help="Number of denoising steps (default: CONFIG eval_steps=50)")
+    parser.add_argument("--encoder", choices=["frozen", "contrastive"], default="frozen",
+                        help="Text encoder to use: 'frozen' (BGE default) or "
+                             "'contrastive' (loads checkpoints/contrastive_text_selfies.pt)")
+    parser.add_argument("--model_size", type=str, default="27M",
+                        help="Model size tag used in checkpoint/output filenames (default: 27M)")
     args = parser.parse_args()
+
+    # Apply run identity to CONFIG paths before anything else
+    _apply_run_config(args.model_size, args.encoder)
 
     if args.eval_only:
         # ── Eval-only mode ────────────────────────────────────────────────────
@@ -986,7 +1057,8 @@ if __name__ == "__main__":
         else:
             device = torch.device("cpu")
         print(f"[device] {device}")
-        print(f"[mode]   eval_only  eos_truncate={args.eos_truncate}")
+        print(f"[mode]   eval_only  encoder={args.encoder}  model_size={args.model_size}  "
+              f"eos_truncate={args.eos_truncate}")
 
         tokenizer_path = PROJECT_ROOT / "chemical_tokenizer.json"
         tokenizer      = ChemicalTokenizer(tokenizer_path)
@@ -1009,6 +1081,10 @@ if __name__ == "__main__":
             dropout         = 0.0,
         ).to(device)
 
+        # Swap in contrastive text encoder if requested (before loading checkpoint)
+        if args.encoder == "contrastive":
+            model.text_encoder = _load_contrastive_text_encoder(device)
+
         best_ckpt = Path(CONFIG["save_ckpt"])
         if not best_ckpt.exists():
             raise FileNotFoundError(
@@ -1022,6 +1098,8 @@ if __name__ == "__main__":
               f"step={ckpt.get('step', '?')}")
 
         evaluate_test_set(model, tokenizer, hf_tokenizer, device,
-                          test_csv, eos_truncate=args.eos_truncate)
+                          test_csv, eos_truncate=args.eos_truncate,
+                          cfg_scale=args.cfg, temperature=args.temp,
+                          num_steps=args.steps)
     else:
         train()

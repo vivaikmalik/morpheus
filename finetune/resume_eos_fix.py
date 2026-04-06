@@ -1,7 +1,7 @@
 """
 finetune/resume_eos_fix.py
 --------------------------
-Resumes fine-tuning from checkpoints/best_finetuned_model.pt with two fixes:
+Resumes fine-tuning from checkpoints/molinst_27M_frozen_no_eos.pt with two fixes:
 
   1. EOS weight fix: diffusion_loss now uses eos_weight=5.0, pad_weight=0.05
      (matching train_upscaled.py) so the model learns to terminate sequences
@@ -11,7 +11,7 @@ Resumes fine-tuning from checkpoints/best_finetuned_model.pt with two fixes:
      not aggressive retraining.
 
 Changes vs train_text_condition.py:
-  - Load checkpoint: best_finetuned_model.pt  (not best_model_upscaled.pt)
+  - Load checkpoint: molinst_27M_frozen_no_eos.pt  (not zinc_17M_pretrain.pt)
   - diffusion_loss: eos_weight=5.0, pad_weight=0.05
   - learning_rate: 1e-5
   - num_epochs: 3
@@ -58,7 +58,7 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 # CONFIG
 # =============================================================================
 CONFIG = {
-    # Model — must match best_finetuned_model.pt
+    # Model — must match molinst_27M_frozen_no_eos.pt
     "vocab_size"  : 110,
     "hidden_size" : 512,
     "num_heads"   : 8,
@@ -101,7 +101,7 @@ CONFIG = {
     # Paths
     "project_root"  : str(Path(__file__).parent.parent),
     "checkpoint_dir": str(Path(__file__).parent.parent / "checkpoints"),
-    "resume_ckpt"   : "best_finetuned_model.pt",   # checkpoint to resume from
+    "resume_ckpt"   : "molinst_27M_frozen_no_eos.pt",   # checkpoint to resume from
     "save_ckpt"     : "best_finetuned_eos_fix.pt",  # checkpoint to save to
     "log_path"      : str(Path(__file__).parent.parent / "outputs" / "finetune_eos_fix_log.csv"),
     "plot_dir"      : str(Path(__file__).parent.parent / "outputs" / "plots" / "finetune_eos_fix"),

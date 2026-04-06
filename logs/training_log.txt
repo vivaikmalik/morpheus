@@ -1,0 +1,621 @@
+[device] Apple MPS
+[data] Downloading ZINC250K from HuggingFace …
+[data] Loaded 249,455 rows. Columns: ['index', 'smiles', 'selfies', 'logP', 'qed', 'SAS']
+[data] Using pre-computed SELFIES column.
+[data] Filter summary:
+  Total raw                :  249,455
+  Failed SMILES→SELFIES    :        0
+  Unknown vocab tokens     :        0
+  Exceeded max length      :        0
+  Kept                     :  249,455
+[data] Train: 224,510 | Val: 24,945
+[model] 17,443,840 total params | 17,443,840 trainable
+[model] hidden=512 | ffn=1024 | layers=8 | heads=8 | head_dim=64
+[sched] 26,310 total steps | 1000 warmup | 1754 steps/epoch
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 1/15
+──────────────────────────────────────────────────────────────────────
+/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/torch/utils/data/dataloader.py:775: UserWarning: 'pin_memory' argument is set as true but not supported on MPS now, device pinned memory won't be used.
+  super().__init__(loader)
+  step    100/26310 | loss 2.6851 | lr 4.00e-05 | 10,270 tok/s | elapsed 1.5m | ETA 405.9m
+  step    200/26310 | loss 2.2572 | lr 8.00e-05 | 7,477 tok/s | elapsed 3.7m | ETA 478.9m
+  step    300/26310 | loss 2.1915 | lr 1.20e-04 | 8,578 tok/s | elapsed 5.6m | ETA 481.2m
+  step    400/26310 | loss 2.1743 | lr 1.60e-04 | 8,868 tok/s | elapsed 7.4m | ETA 476.4m
+  step    500/26310 | loss 2.0786 | lr 2.00e-04 | 8,697 tok/s | elapsed 9.2m | ETA 474.3m
+  step    600/26310 | loss 1.8582 | lr 2.40e-04 | 8,782 tok/s | elapsed 11.0m | ETA 470.4m
+  step    700/26310 | loss 1.7000 | lr 2.80e-04 | 8,685 tok/s | elapsed 12.8m | ETA 467.7m
+  step    800/26310 | loss 1.7060 | lr 3.20e-04 | 9,160 tok/s | elapsed 14.5m | ETA 463.9m
+  step    900/26310 | loss 1.6732 | lr 3.60e-04 | 8,902 tok/s | elapsed 16.3m | ETA 460.1m
+  step   1000/26310 | loss 1.6462 | lr 4.00e-04 | 9,052 tok/s | elapsed 18.1m | ETA 456.9m
+  step   1100/26310 | loss 1.5691 | lr 4.00e-04 | 8,745 tok/s | elapsed 19.8m | ETA 454.8m
+  step   1200/26310 | loss 1.5359 | lr 4.00e-04 | 5,608 tok/s | elapsed 22.1m | ETA 463.3m
+  step   1300/26310 | loss 1.4937 | lr 4.00e-04 | 8,789 tok/s | elapsed 24.4m | ETA 469.8m
+  step   1400/26310 | loss 1.4394 | lr 4.00e-04 | 8,893 tok/s | elapsed 26.2m | ETA 465.8m
+  step   1500/26310 | loss 1.5572 | lr 4.00e-04 | 8,831 tok/s | elapsed 28.0m | ETA 462.4m
+  step   1600/26310 | loss 1.4634 | lr 3.99e-04 | 8,865 tok/s | elapsed 29.7m | ETA 459.0m
+  step   1700/26310 | loss 1.4311 | lr 3.99e-04 | 8,845 tok/s | elapsed 31.5m | ETA 456.1m
+
+[epoch 1] Running validation …
+[epoch 1] val_loss = 1.3862  (best so far: inf)
+
+============================================================
+  GENERATED MOLECULES — Step 1754
+============================================================
+  [0] ✓ CCOC=CC=C1CC=C(CCP)c2ccc3c(c2)C=CC(C=CC2=CC=CC2=CC=CCS3)C(N)=NC(=
+  [1] ✓ O=S(=O)([O-])C1=CNCC2C3=C2C3C=C1
+  [2] ✓ C[CH]C=C[NH+](CCC)CN(C=Cc1ccccc1[N+](=O)[O-])C(=O)C1=CC=CC[SH]1C(
+  [3] ✓ C=C1CC=CC=CC(Cl)=NSCC=C=C2C=[NH+]C(N1)C(=O)NC=CC=CCC2
+  [4] ✓ O=C1C=CC1
+  [5] ✓ CC=CC=CC1=C(COBr)C(=O)N(C(=O)[CH]Nc2ccccc2[N+](=O)[O-])C=COC1
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=1.3862)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 2/15
+──────────────────────────────────────────────────────────────────────
+  step   1800/26310 | loss 1.5025 | lr 3.99e-04 | 8,379 tok/s | elapsed 34.5m | ETA 469.5m
+  step   1900/26310 | loss 1.4025 | lr 3.99e-04 | 9,017 tok/s | elapsed 36.3m | ETA 465.8m
+  step   2000/26310 | loss 1.4384 | lr 3.98e-04 | 8,712 tok/s | elapsed 38.1m | ETA 462.8m
+  step   2100/26310 | loss 1.3961 | lr 3.98e-04 | 9,010 tok/s | elapsed 39.8m | ETA 459.3m
+  step   2200/26310 | loss 1.3817 | lr 3.98e-04 | 8,852 tok/s | elapsed 41.6m | ETA 456.3m
+  step   2300/26310 | loss 1.2679 | lr 3.97e-04 | 8,818 tok/s | elapsed 43.4m | ETA 453.5m
+  step   2400/26310 | loss 1.4102 | lr 3.97e-04 | 8,801 tok/s | elapsed 45.3m | ETA 451.1m
+  step   2500/26310 | loss 1.2600 | lr 3.97e-04 | 8,423 tok/s | elapsed 47.2m | ETA 449.2m
+  step   2600/26310 | loss 1.4221 | lr 3.96e-04 | 8,724 tok/s | elapsed 49.0m | ETA 446.4m
+  step   2700/26310 | loss 1.2821 | lr 3.96e-04 | 8,698 tok/s | elapsed 50.8m | ETA 444.3m
+  step   2800/26310 | loss 1.3085 | lr 3.95e-04 | 8,442 tok/s | elapsed 52.6m | ETA 441.9m
+  step   2900/26310 | loss 1.3538 | lr 3.94e-04 | 8,528 tok/s | elapsed 54.5m | ETA 439.8m
+  step   3000/26310 | loss 1.2051 | lr 3.94e-04 | 8,560 tok/s | elapsed 56.3m | ETA 437.6m
+  step   3100/26310 | loss 1.1962 | lr 3.93e-04 | 8,552 tok/s | elapsed 58.2m | ETA 435.6m
+  step   3200/26310 | loss 1.2700 | lr 3.93e-04 | 8,490 tok/s | elapsed 60.0m | ETA 433.6m
+  step   3300/26310 | loss 1.1940 | lr 3.92e-04 | 8,326 tok/s | elapsed 61.9m | ETA 431.7m
+  step   3400/26310 | loss 1.1736 | lr 3.91e-04 | 8,474 tok/s | elapsed 63.8m | ETA 429.9m
+  step   3500/26310 | loss 1.1242 | lr 3.90e-04 | 8,534 tok/s | elapsed 65.7m | ETA 428.0m
+
+[epoch 2] Running validation …
+[epoch 2] val_loss = 1.2216  (best so far: 1.3862)
+
+============================================================
+  GENERATED MOLECULES — Step 3508
+============================================================
+  [0] ✓ CC1[C]CC(=O)NC2=CC=CN[CH]CC=CC(=CN2)C2=CC(O)C=C([N+](=O)[O-])C2=C
+  [1] ✓ N[NH+]c1cc(Cl)ccc1C(=O)C1C=CC=CC(=O)NC(O)C=CC=C2C(=O)NN2c2ccccc21
+  [2] ✓ CC=N[CH]C1[N-]c2ccccc2N(C)C=C(C=CC=CCN2OCC(c3ccccc3)[NH+]=CC2=O)C
+  [3] ✓ Cc1ccccc1N(C)CCCC(=O)C1=C2C=C(COC2)N=CCCC(C)CC1
+  [4] ✓ COC=CCC1CNC(=O)CCCCN2C(=O)CN(CCC=Cc3c4cccc3C41)N2C=O
+  [5] ✓ CCOC1=CCC=C2C=CNC(=O)C(=O)[NH+]CC=C3CCCc4ccc([NH+])c(c4)OCC(=O)C2
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=1.2216)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 3/15
+──────────────────────────────────────────────────────────────────────
+  step   3600/26310 | loss 1.2162 | lr 3.90e-04 | 8,380 tok/s | elapsed 68.6m | ETA 433.0m
+  step   3700/26310 | loss 1.1821 | lr 3.89e-04 | 8,524 tok/s | elapsed 70.5m | ETA 430.8m
+  step   3800/26310 | loss 1.2686 | lr 3.88e-04 | 8,471 tok/s | elapsed 72.4m | ETA 428.6m
+  step   3900/26310 | loss 1.2247 | lr 3.87e-04 | 8,638 tok/s | elapsed 74.2m | ETA 426.4m
+  step   4000/26310 | loss 1.2727 | lr 3.86e-04 | 8,567 tok/s | elapsed 76.0m | ETA 424.1m
+  step   4100/26310 | loss 1.2235 | lr 3.85e-04 | 8,528 tok/s | elapsed 77.9m | ETA 421.9m
+  step   4200/26310 | loss 1.1583 | lr 3.84e-04 | 8,412 tok/s | elapsed 79.8m | ETA 419.9m
+  step   4300/26310 | loss 1.1954 | lr 3.83e-04 | 8,517 tok/s | elapsed 81.6m | ETA 417.7m
+  step   4400/26310 | loss 1.1112 | lr 3.82e-04 | 8,455 tok/s | elapsed 83.5m | ETA 415.8m
+  step   4500/26310 | loss 1.3155 | lr 3.81e-04 | 8,490 tok/s | elapsed 85.4m | ETA 413.8m
+  step   4600/26310 | loss 1.2288 | lr 3.80e-04 | 8,392 tok/s | elapsed 87.2m | ETA 411.8m
+  step   4700/26310 | loss 1.2811 | lr 3.79e-04 | 8,502 tok/s | elapsed 89.1m | ETA 409.8m
+  step   4800/26310 | loss 1.3236 | lr 3.78e-04 | 8,442 tok/s | elapsed 91.0m | ETA 407.8m
+  step   4900/26310 | loss 1.3200 | lr 3.77e-04 | 8,355 tok/s | elapsed 92.9m | ETA 405.8m
+  step   5000/26310 | loss 1.1812 | lr 3.76e-04 | 8,477 tok/s | elapsed 94.8m | ETA 403.8m
+  step   5100/26310 | loss 1.2758 | lr 3.75e-04 | 8,457 tok/s | elapsed 96.6m | ETA 401.9m
+  step   5200/26310 | loss 1.2105 | lr 3.73e-04 | 8,455 tok/s | elapsed 98.5m | ETA 399.9m
+
+[epoch 3] Running validation …
+[epoch 3] val_loss = 1.1310  (best so far: 1.2216)
+
+============================================================
+  GENERATED MOLECULES — Step 5262
+============================================================
+  [0] ✓ CCCC(CC)C1=NNC(=O)C1C(=O)OC=CN1C=NC=CC=NC=CC1
+  [1] ✓ C#COSN1C(C)=CC=CCCCN2C(=O)C(O)(c3ccccc3C)C=[PH+]C(=O)NC3C(=C21)Nc
+  [2] ✓ Cc1c[nH+]ccc1N1C(=O)C2N=COC=C1C=C(C(=O)[O-])[CH]NC(=O)N=C2N
+  [3] ✓ C=PC=CC=CC1=C2C(NC(=O)C=NC=CC(=S)[O+](C#N)C(=O)O)=CN=CC(=O)C12
+  [4] ✓ NCCNC1OC23C=C(C=CC=CC2)C(C=O)N(C(=O)[CH]c2cccc[nH+]2)C[CH]C1C[CH]
+  [5] ✓ CCOc1c(NC(=O)C=C2C=CC(F)C(Cl)=C2)cccc1C(=O)C[CH]C1=NNC=CC=C1
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=1.1310)
+  💾 Periodic checkpoint → upscaled_epoch_3.pt
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 4/15
+──────────────────────────────────────────────────────────────────────
+  step   5300/26310 | loss 1.1259 | lr 3.72e-04 | 8,306 tok/s | elapsed 101.5m | ETA 402.3m
+  step   5400/26310 | loss 1.1303 | lr 3.71e-04 | 8,438 tok/s | elapsed 103.4m | ETA 400.3m
+  step   5500/26310 | loss 1.1658 | lr 3.70e-04 | 8,313 tok/s | elapsed 105.3m | ETA 398.3m
+  step   5600/26310 | loss 1.2746 | lr 3.68e-04 | 8,247 tok/s | elapsed 107.1m | ETA 396.2m
+  step   5700/26310 | loss 1.2378 | lr 3.67e-04 | 8,370 tok/s | elapsed 109.0m | ETA 394.3m
+  step   5800/26310 | loss 1.1682 | lr 3.66e-04 | 8,401 tok/s | elapsed 110.9m | ETA 392.3m
+  step   5900/26310 | loss 1.1442 | lr 3.64e-04 | 8,533 tok/s | elapsed 112.8m | ETA 390.1m
+  step   6000/26310 | loss 1.2173 | lr 3.63e-04 | 8,089 tok/s | elapsed 114.9m | ETA 389.0m
+  step   6100/26310 | loss 1.1271 | lr 3.61e-04 | 8,486 tok/s | elapsed 116.7m | ETA 386.8m
+  step   6200/26310 | loss 1.0653 | lr 3.60e-04 | 8,609 tok/s | elapsed 118.6m | ETA 384.7m
+  step   6300/26310 | loss 1.0807 | lr 3.58e-04 | 8,505 tok/s | elapsed 120.5m | ETA 382.7m
+  step   6400/26310 | loss 1.1763 | lr 3.57e-04 | 8,532 tok/s | elapsed 122.3m | ETA 380.5m
+  step   6500/26310 | loss 1.1020 | lr 3.55e-04 | 8,591 tok/s | elapsed 124.2m | ETA 378.4m
+  step   6600/26310 | loss 0.9850 | lr 3.54e-04 | 8,573 tok/s | elapsed 126.0m | ETA 376.4m
+  step   6700/26310 | loss 1.1542 | lr 3.52e-04 | 8,386 tok/s | elapsed 127.9m | ETA 374.4m
+  step   6800/26310 | loss 1.0857 | lr 3.50e-04 | 8,482 tok/s | elapsed 129.8m | ETA 372.4m
+  step   6900/26310 | loss 1.0920 | lr 3.49e-04 | 8,558 tok/s | elapsed 131.6m | ETA 370.3m
+  step   7000/26310 | loss 1.1517 | lr 3.47e-04 | 8,570 tok/s | elapsed 133.5m | ETA 368.3m
+
+[epoch 4] Running validation …
+[epoch 4] val_loss = 1.0787  (best so far: 1.1310)
+
+============================================================
+  GENERATED MOLECULES — Step 7016
+============================================================
+  [0] ✓ COc1ccncc1C(=O)NCCCC=CC(=O)N(C(=O)c1ccccc1C#CCC(C)=CSCCN)c1cc[nH+
+  [1] ✓ CC=CCC(=O)N(C=O)CCN[CH]C(=O)Nc1cccnc1C
+  [2] ✓ CCOC1COC=C2C=CC(NC(=S)N(C=O)Cc3ccccc3)=CC=CC(=O)NC(=C2)c2ccccc2C1
+  [3] ✓ CCC1=C(C=NN)C=NC(NC(=O)C=CC=CC(O)=NNCCC(=O)c2ccccc2C(=O)[O-])C=C1
+  [4] ✓ C=PC1=C2N=C(C)C(C=CC=CC1)C(=O)N1CC3C[C@H]1CC(=O)C23Cc1cc2cc(c1)C(
+  [5] ✓ CN=CCC(=O)N(Cc1ccccc1N)C(=O)NC1=CC=CC(=O)NC2[CH]C(=NC(OC)=N2)C=NC
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=1.0787)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 5/15
+──────────────────────────────────────────────────────────────────────
+  step   7100/26310 | loss 1.0759 | lr 3.45e-04 | 8,554 tok/s | elapsed 136.4m | ETA 369.0m
+  step   7200/26310 | loss 1.0246 | lr 3.44e-04 | 8,494 tok/s | elapsed 138.3m | ETA 367.0m
+  step   7300/26310 | loss 1.1721 | lr 3.42e-04 | 8,584 tok/s | elapsed 140.1m | ETA 364.8m
+  step   7400/26310 | loss 1.2923 | lr 3.40e-04 | 8,523 tok/s | elapsed 141.9m | ETA 362.7m
+  step   7500/26310 | loss 1.2497 | lr 3.38e-04 | 8,504 tok/s | elapsed 143.8m | ETA 360.7m
+  step   7600/26310 | loss 1.0770 | lr 3.37e-04 | 8,570 tok/s | elapsed 145.7m | ETA 358.6m
+  step   7700/26310 | loss 1.1569 | lr 3.35e-04 | 8,416 tok/s | elapsed 147.5m | ETA 356.5m
+  step   7800/26310 | loss 0.9944 | lr 3.33e-04 | 8,581 tok/s | elapsed 149.4m | ETA 354.4m
+  step   7900/26310 | loss 1.1524 | lr 3.31e-04 | 8,564 tok/s | elapsed 151.2m | ETA 352.4m
+  step   8000/26310 | loss 1.1405 | lr 3.29e-04 | 8,491 tok/s | elapsed 153.1m | ETA 350.4m
+  step   8100/26310 | loss 1.1484 | lr 3.27e-04 | 8,581 tok/s | elapsed 154.9m | ETA 348.3m
+  step   8200/26310 | loss 1.0509 | lr 3.25e-04 | 8,510 tok/s | elapsed 156.8m | ETA 346.2m
+  step   8300/26310 | loss 1.0874 | lr 3.23e-04 | 8,376 tok/s | elapsed 158.7m | ETA 344.3m
+  step   8400/26310 | loss 1.0899 | lr 3.21e-04 | 8,427 tok/s | elapsed 160.5m | ETA 342.3m
+  step   8500/26310 | loss 0.9637 | lr 3.19e-04 | 8,543 tok/s | elapsed 162.4m | ETA 340.3m
+  step   8600/26310 | loss 1.0483 | lr 3.17e-04 | 8,539 tok/s | elapsed 164.3m | ETA 338.3m
+  step   8700/26310 | loss 1.1347 | lr 3.15e-04 | 8,516 tok/s | elapsed 166.1m | ETA 336.2m
+
+[epoch 5] Running validation …
+[epoch 5] val_loss = 1.0440  (best so far: 1.0787)
+
+============================================================
+  GENERATED MOLECULES — Step 8770
+============================================================
+  [0] ✓ CC=CC=C1NC(=O)NCc2c(F)cccc2C(=O)Nc2c(NCc3ccccc3)cccc2C1=O
+  [1] ✓ CCCCNC1=CC2=CC3C(=CC4=C3C(=O)NCC3=C(O4)C(=O)C(=O)N(Cc4ccccc4)C=CC
+  [2] ✓ C#CCC1C2C3=CC1(NC(=O)CNC(=O)[C][C@]1(CCC(=O)c4ccccc4F)SC1=CC3=CC=
+  [3] ✓ CN=NCCCS(=O)(=O)NCCC12CC1C(=N)C1CCC[C@H](CC(C)Nc3ccccc3)[C@@H]1C2
+  [4] ✓ CC=CC=C1CC(C=CC)c2ccc3c(c2)NC(=O)[CH]C(=O)[C@H]2CCC[C@@H]2OC1C(=O
+  [5] ✓ CCCC1OC2(C=CC=CC2)N1C(=O)NCCN1N(c2ccccc2)CC(=O)C(=S)c2ccccc2S1(=O
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=1.0440)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 6/15
+──────────────────────────────────────────────────────────────────────
+  step   8800/26310 | loss 1.0722 | lr 3.13e-04 | 8,383 tok/s | elapsed 169.0m | ETA 336.3m
+  step   8900/26310 | loss 1.1261 | lr 3.11e-04 | 8,575 tok/s | elapsed 170.9m | ETA 334.3m
+  step   9000/26310 | loss 1.1395 | lr 3.09e-04 | 8,334 tok/s | elapsed 172.8m | ETA 332.3m
+  step   9100/26310 | loss 1.1255 | lr 3.07e-04 | 8,621 tok/s | elapsed 174.6m | ETA 330.2m
+  step   9200/26310 | loss 1.1831 | lr 3.05e-04 | 8,471 tok/s | elapsed 176.5m | ETA 328.2m
+  step   9300/26310 | loss 1.1108 | lr 3.03e-04 | 8,525 tok/s | elapsed 178.3m | ETA 326.2m
+  step   9400/26310 | loss 1.0112 | lr 3.01e-04 | 8,651 tok/s | elapsed 180.2m | ETA 324.1m
+  step   9500/26310 | loss 1.1096 | lr 2.99e-04 | 8,684 tok/s | elapsed 182.0m | ETA 322.1m
+  step   9600/26310 | loss 0.9496 | lr 2.96e-04 | 8,473 tok/s | elapsed 183.9m | ETA 320.1m
+  step   9700/26310 | loss 0.9795 | lr 2.94e-04 | 8,586 tok/s | elapsed 185.8m | ETA 318.1m
+  step   9800/26310 | loss 0.9920 | lr 2.92e-04 | 8,395 tok/s | elapsed 187.6m | ETA 316.1m
+  step   9900/26310 | loss 1.0465 | lr 2.90e-04 | 8,704 tok/s | elapsed 189.4m | ETA 314.0m
+  step  10000/26310 | loss 1.0313 | lr 2.88e-04 | 8,702 tok/s | elapsed 191.3m | ETA 312.0m
+  step  10100/26310 | loss 1.1428 | lr 2.85e-04 | 8,722 tok/s | elapsed 193.1m | ETA 310.0m
+  step  10200/26310 | loss 1.0818 | lr 2.83e-04 | 8,632 tok/s | elapsed 194.9m | ETA 307.9m
+  step  10300/26310 | loss 1.0197 | lr 2.81e-04 | 8,680 tok/s | elapsed 196.8m | ETA 305.8m
+  step  10400/26310 | loss 1.0785 | lr 2.79e-04 | 8,712 tok/s | elapsed 198.6m | ETA 303.8m
+  step  10500/26310 | loss 0.9506 | lr 2.76e-04 | 8,651 tok/s | elapsed 200.4m | ETA 301.8m
+
+[epoch 6] Running validation …
+[epoch 6] val_loss = 1.0176  (best so far: 1.0440)
+
+============================================================
+  GENERATED MOLECULES — Step 10524
+============================================================
+  [0] ✓ C=C=C1CC(NC(=O)[C@H](C)OCCCNC(=O)CCCCN(CC)c2ccc(C)cc2F)C=CC1=CC
+  [1] ✓ COC1=CC=CC(=CPSPC)N[S@](=O)[CH]CCCN2CC(C1=O)N(CCCc1cccc(C)c1)NC(=
+  [2] ✓ CC=CC=CC1NC(=O)C(NC(=O)C=C(NC(=O)c2ccccc2)C(=O)NCc2ccccc2)C1=O
+  [3] ✓ C=C1CC2CCN(O1)C(=O)NCCN(OC)C(=O)C1=CC(=N)N1CCC(=O)N(c1ccccc1)C2
+  [4] ✓ C=CCCC[C]=C=CC[C@H](NCC)NC(=O)CN(C(=O)c1cc2cnccc2s1)S(=O)(=O)c1cc
+  [5] ✓ C#CC1C[CH][CH]CCN(C)C(=O)NCCN1C(=O)[C@@H]1CCCN1C(=O)CC1CN(C(=O)c2
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=1.0176)
+  💾 Periodic checkpoint → upscaled_epoch_6.pt
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 7/15
+──────────────────────────────────────────────────────────────────────
+  step  10600/26310 | loss 1.1495 | lr 2.74e-04 | 8,708 tok/s | elapsed 203.3m | ETA 301.3m
+  step  10700/26310 | loss 0.9884 | lr 2.72e-04 | 8,727 tok/s | elapsed 205.1m | ETA 299.2m
+  step  10800/26310 | loss 1.1364 | lr 2.69e-04 | 8,607 tok/s | elapsed 206.9m | ETA 297.2m
+  step  10900/26310 | loss 0.9925 | lr 2.67e-04 | 8,470 tok/s | elapsed 208.8m | ETA 295.2m
+  step  11000/26310 | loss 0.9806 | lr 2.65e-04 | 8,497 tok/s | elapsed 210.7m | ETA 293.2m
+  step  11100/26310 | loss 1.1027 | lr 2.62e-04 | 8,669 tok/s | elapsed 212.5m | ETA 291.2m
+  step  11200/26310 | loss 1.0693 | lr 2.60e-04 | 8,659 tok/s | elapsed 214.3m | ETA 289.2m
+  step  11300/26310 | loss 1.0784 | lr 2.58e-04 | 8,703 tok/s | elapsed 216.1m | ETA 287.1m
+  step  11400/26310 | loss 0.9939 | lr 2.55e-04 | 8,533 tok/s | elapsed 218.0m | ETA 285.1m
+  step  11500/26310 | loss 1.0102 | lr 2.53e-04 | 8,579 tok/s | elapsed 219.8m | ETA 283.1m
+  step  11600/26310 | loss 1.0914 | lr 2.50e-04 | 8,608 tok/s | elapsed 221.7m | ETA 281.1m
+  step  11700/26310 | loss 0.9718 | lr 2.48e-04 | 8,186 tok/s | elapsed 223.5m | ETA 279.1m
+  step  11800/26310 | loss 1.1371 | lr 2.46e-04 | 8,643 tok/s | elapsed 225.4m | ETA 277.1m
+  step  11900/26310 | loss 0.8804 | lr 2.43e-04 | 8,683 tok/s | elapsed 227.2m | ETA 275.1m
+  step  12000/26310 | loss 1.1018 | lr 2.41e-04 | 8,722 tok/s | elapsed 229.0m | ETA 273.1m
+  step  12100/26310 | loss 1.0206 | lr 2.38e-04 | 8,615 tok/s | elapsed 230.8m | ETA 271.1m
+  step  12200/26310 | loss 1.0696 | lr 2.36e-04 | 8,440 tok/s | elapsed 232.7m | ETA 269.1m
+
+[epoch 7] Running validation …
+[epoch 7] val_loss = 0.9993  (best so far: 1.0176)
+
+============================================================
+  GENERATED MOLECULES — Step 12278
+============================================================
+  [0] ✓ C[NH+]1CCCCCN(C(=O)CCCN(O)CCc2cccc(OCCCO)c2)C1
+  [1] ✓ C=C=CC=C=CN(CC1=C=C(NC(=O)C2CCC(c3ccccc3)C2C=C)CC2=C=N[SH]21)C(=O
+  [2] ✓ Cc1ccc[nH]1
+  [3] ✓ C=CC1CCCNC(=O)C1C(=CC=CC)N(N)SC(=O)c1cccc2c1S(=O)(=O)C=C1C=C(C#N)
+  [4] ✓ CC=CC=C1CNC(=O)CC2C(NN)=CC3CCC1N([SH]=C1NN=C(c4ccccc4)C1C=O)C(=O)
+  [5] ✓ C[CH]CC=C1C(C)=[NH+][C@@H]1NC(=O)C=CC=C([O-])CC(=O)O[C@H](C)C(=O)
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=0.9993)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 8/15
+──────────────────────────────────────────────────────────────────────
+  step  12300/26310 | loss 1.0541 | lr 2.33e-04 | 8,519 tok/s | elapsed 235.5m | ETA 268.3m
+  step  12400/26310 | loss 0.8982 | lr 2.31e-04 | 8,611 tok/s | elapsed 237.4m | ETA 266.3m
+  step  12500/26310 | loss 0.9769 | lr 2.29e-04 | 8,722 tok/s | elapsed 239.2m | ETA 264.3m
+  step  12600/26310 | loss 1.1334 | lr 2.26e-04 | 8,690 tok/s | elapsed 241.0m | ETA 262.3m
+  step  12700/26310 | loss 0.9368 | lr 2.24e-04 | 7,056 tok/s | elapsed 243.0m | ETA 260.4m
+  step  12800/26310 | loss 0.9776 | lr 2.21e-04 | 8,656 tok/s | elapsed 244.9m | ETA 258.5m
+  step  12900/26310 | loss 0.9100 | lr 2.19e-04 | 8,737 tok/s | elapsed 246.8m | ETA 256.5m
+  step  13000/26310 | loss 1.0247 | lr 2.16e-04 | 8,659 tok/s | elapsed 248.6m | ETA 254.5m
+  step  13100/26310 | loss 1.0455 | lr 2.14e-04 | 8,684 tok/s | elapsed 250.4m | ETA 252.5m
+  step  13200/26310 | loss 0.9556 | lr 2.11e-04 | 8,633 tok/s | elapsed 252.3m | ETA 250.5m
+  step  13300/26310 | loss 0.9728 | lr 2.09e-04 | 8,577 tok/s | elapsed 254.1m | ETA 248.6m
+  step  13400/26310 | loss 1.0921 | lr 2.06e-04 | 8,642 tok/s | elapsed 255.9m | ETA 246.6m
+  step  13500/26310 | loss 1.0462 | lr 2.04e-04 | 8,152 tok/s | elapsed 257.8m | ETA 244.6m
+  step  13600/26310 | loss 1.0139 | lr 2.01e-04 | 8,607 tok/s | elapsed 259.7m | ETA 242.7m
+  step  13700/26310 | loss 1.0006 | lr 1.99e-04 | 8,586 tok/s | elapsed 261.5m | ETA 240.7m
+  step  13800/26310 | loss 0.8895 | lr 1.96e-04 | 8,683 tok/s | elapsed 263.4m | ETA 238.7m
+  step  13900/26310 | loss 1.0178 | lr 1.94e-04 | 8,624 tok/s | elapsed 265.2m | ETA 236.8m
+  step  14000/26310 | loss 1.0721 | lr 1.91e-04 | 8,627 tok/s | elapsed 267.1m | ETA 234.8m
+
+[epoch 8] Running validation …
+[epoch 8] val_loss = 0.9777  (best so far: 0.9993)
+
+============================================================
+  GENERATED MOLECULES — Step 14032
+============================================================
+  [0] ✓ N#Cc1ccccc1S(=O)(=O)N1CCC(=O)NCC2=CC=CC(=O)NC3=N[SH]1C(C=CC=C3)CC
+  [1] ✓ CC=CC=C(Cl)NC(=O)C(=O)NCCNC(=O)c1cc2ccccc2[nH]1
+  [2] ✓ CC1(C)C[C@H]2C=C(C(=O)NCC3CCC=C[NH+]31)C(F)=CC=CNC(=O)[C@@H]1CC=C
+  [3] ✓ CCCC=C1C=CC2C=C(C)C(NC(=O)C(=O)N3CCN(c4ccccc4)CC3)=CC=C2S(=O)(=O)
+  [4] ✓ CC=CC=C1CC2C(CCNc3ccc(F)cc3)C(C(=O)NCCCc3c(Br)cccc3C(=O)N1)C2(C)N
+  [5] ✓ CCC1=CNC2CC3CN(c4cnn(-c5ccccn5)c4)CCN3NC(=O)NC2CNCC(=O)NC#CC=CC1
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=0.9777)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 9/15
+──────────────────────────────────────────────────────────────────────
+  step  14100/26310 | loss 1.0307 | lr 1.89e-04 | 8,713 tok/s | elapsed 269.9m | ETA 233.8m
+  step  14200/26310 | loss 1.0019 | lr 1.86e-04 | 8,624 tok/s | elapsed 271.8m | ETA 231.8m
+  step  14300/26310 | loss 1.1184 | lr 1.84e-04 | 8,690 tok/s | elapsed 273.6m | ETA 229.8m
+  step  14400/26310 | loss 1.0530 | lr 1.82e-04 | 8,646 tok/s | elapsed 275.4m | ETA 227.8m
+  step  14500/26310 | loss 0.9905 | lr 1.79e-04 | 8,666 tok/s | elapsed 277.3m | ETA 225.8m
+  step  14600/26310 | loss 0.9854 | lr 1.77e-04 | 8,655 tok/s | elapsed 279.1m | ETA 223.9m
+  step  14700/26310 | loss 0.9379 | lr 1.74e-04 | 8,599 tok/s | elapsed 280.9m | ETA 221.9m
+  step  14800/26310 | loss 0.9074 | lr 1.72e-04 | 8,432 tok/s | elapsed 282.8m | ETA 219.9m
+  step  14900/26310 | loss 0.8880 | lr 1.69e-04 | 8,603 tok/s | elapsed 284.6m | ETA 218.0m
+  step  15000/26310 | loss 1.0543 | lr 1.67e-04 | 8,648 tok/s | elapsed 286.5m | ETA 216.0m
+  step  15100/26310 | loss 1.0261 | lr 1.64e-04 | 8,599 tok/s | elapsed 288.3m | ETA 214.0m
+  step  15200/26310 | loss 0.9477 | lr 1.62e-04 | 8,681 tok/s | elapsed 290.1m | ETA 212.1m
+  step  15300/26310 | loss 0.8910 | lr 1.59e-04 | 8,579 tok/s | elapsed 292.0m | ETA 210.1m
+  step  15400/26310 | loss 0.9179 | lr 1.57e-04 | 8,678 tok/s | elapsed 293.8m | ETA 208.2m
+  step  15500/26310 | loss 1.0394 | lr 1.55e-04 | 8,554 tok/s | elapsed 295.7m | ETA 206.2m
+  step  15600/26310 | loss 1.1626 | lr 1.52e-04 | 8,442 tok/s | elapsed 297.5m | ETA 204.3m
+  step  15700/26310 | loss 0.9627 | lr 1.50e-04 | 8,541 tok/s | elapsed 299.4m | ETA 202.3m
+
+[epoch 9] Running validation …
+[epoch 9] val_loss = 0.9589  (best so far: 0.9777)
+
+============================================================
+  GENERATED MOLECULES — Step 15786
+============================================================
+  [0] ✓ CNC1(NC2C3CC2N(S(=O)(=O)c2ccc(Br)cc2[N+](=O)[O-])CCC3=O)C(C=COC)=
+  [1] ✓ CC(=NCC(=O)C1=CC=CC=C(OC=CCN)CC=C1)N(C)C(=O)[CH]N1Cc2ccccc2C1=O
+  [2] ✓ C[C]CC1CCCC=CC=NC(=O)N(CC(=O)C2CC2)C(=O)NC=C(C(=O)NCc2ccc3c(c2)CC
+  [3] ✓ CC=C1C=CC2C(C(=O)CC=CC=C(CC)S(=O)(=O)NCC3CCCCCN3)=CC2NC(=O)C2=C1C
+  [4] ✓ O=C(COc1cc2cc(=O)[nH]c3c4c(cc-3c(O)c-2c1)COC=C4)C(=O)N1CCN(c2cccc
+  [5] ✓ CCCC1=CC=CC(=O)NC2=C([CH]CCN)C=C(NO2)C2C(CCN2C(=O)c2ccc(F)cc2)NC(
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=0.9589)
+  💾 Periodic checkpoint → upscaled_epoch_9.pt
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 10/15
+──────────────────────────────────────────────────────────────────────
+  step  15800/26310 | loss 1.0056 | lr 1.47e-04 | 8,515 tok/s | elapsed 302.3m | ETA 201.1m
+  step  15900/26310 | loss 0.9775 | lr 1.45e-04 | 8,415 tok/s | elapsed 304.1m | ETA 199.1m
+  step  16000/26310 | loss 1.0153 | lr 1.43e-04 | 8,478 tok/s | elapsed 306.0m | ETA 197.2m
+  step  16100/26310 | loss 0.9297 | lr 1.40e-04 | 8,349 tok/s | elapsed 307.9m | ETA 195.3m
+  step  16200/26310 | loss 1.0700 | lr 1.38e-04 | 8,590 tok/s | elapsed 309.7m | ETA 193.3m
+  step  16300/26310 | loss 0.9461 | lr 1.36e-04 | 8,604 tok/s | elapsed 311.6m | ETA 191.3m
+  step  16400/26310 | loss 0.9874 | lr 1.33e-04 | 8,589 tok/s | elapsed 313.4m | ETA 189.4m
+  step  16500/26310 | loss 1.0191 | lr 1.31e-04 | 8,624 tok/s | elapsed 315.3m | ETA 187.4m
+  step  16600/26310 | loss 0.9178 | lr 1.29e-04 | 8,577 tok/s | elapsed 317.1m | ETA 185.5m
+  step  16700/26310 | loss 0.9732 | lr 1.26e-04 | 8,622 tok/s | elapsed 319.0m | ETA 183.5m
+  step  16800/26310 | loss 0.9684 | lr 1.24e-04 | 8,609 tok/s | elapsed 320.8m | ETA 181.6m
+  step  16900/26310 | loss 0.9581 | lr 1.22e-04 | 8,313 tok/s | elapsed 322.7m | ETA 179.7m
+  step  17000/26310 | loss 0.9541 | lr 1.19e-04 | 8,636 tok/s | elapsed 324.5m | ETA 177.7m
+  step  17100/26310 | loss 0.9023 | lr 1.17e-04 | 8,600 tok/s | elapsed 326.3m | ETA 175.8m
+  step  17200/26310 | loss 0.9761 | lr 1.15e-04 | 8,593 tok/s | elapsed 328.2m | ETA 173.8m
+  step  17300/26310 | loss 0.9032 | lr 1.13e-04 | 8,609 tok/s | elapsed 330.0m | ETA 171.9m
+  step  17400/26310 | loss 1.0800 | lr 1.10e-04 | 8,591 tok/s | elapsed 331.9m | ETA 169.9m
+  step  17500/26310 | loss 0.9442 | lr 1.08e-04 | 8,625 tok/s | elapsed 333.8m | ETA 168.0m
+
+[epoch 10] Running validation …
+[epoch 10] val_loss = 0.9404  (best so far: 0.9589)
+
+============================================================
+  GENERATED MOLECULES — Step 17540
+============================================================
+  [0] ✓ CCCC1C=C2C(=O)N3C=CC=C(NC(=O)CC4=C(c5ccc(F)cc5)C(=O)C4)C(=C3)C[C@
+  [1] ✓ [CH][C@@H](C(=O)NCCC1=C(C=O)CN(c2cc[nH+]nc2)C1)c1ccccc1C(=O)NC(C=
+  [2] ✓ CN1CCNCC(=O)N[C@H]2[CH]C3C=C(CC=CC3=CC(N)=N2)NC2=C(c3ccc(F)cc3F)C
+  [3] ✓ CC=CCCCC(C)=NC1C(=O)CC2CC3CCCCN(N=CCC3=O)c3cccc(c3)N=C21
+  [4] ✓ CC=C1C=C(C(=O)CCCN(CN)C(=O)CC2C=C(C(=O)N3CCC(c4cccc[nH+]4)CC3)C2)
+  [5] ✓ C=CC=CC=C1CC2(N(C[NH2+]CCC)c3cc[nH+]cc3)CC3C(=O)C4=CCC(CCCCC1=O)C
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=0.9404)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 11/15
+──────────────────────────────────────────────────────────────────────
+  step  17600/26310 | loss 1.0373 | lr 1.06e-04 | 8,579 tok/s | elapsed 336.6m | ETA 166.6m
+  step  17700/26310 | loss 0.8612 | lr 1.04e-04 | 8,653 tok/s | elapsed 338.5m | ETA 164.6m
+  step  17800/26310 | loss 0.9158 | lr 1.02e-04 | 8,548 tok/s | elapsed 340.3m | ETA 162.7m
+  step  17900/26310 | loss 0.9968 | lr 9.94e-05 | 8,496 tok/s | elapsed 342.2m | ETA 160.8m
+  step  18000/26310 | loss 0.8708 | lr 9.73e-05 | 8,410 tok/s | elapsed 344.1m | ETA 158.8m
+  step  18100/26310 | loss 0.9335 | lr 9.52e-05 | 8,658 tok/s | elapsed 345.9m | ETA 156.9m
+  step  18200/26310 | loss 0.8609 | lr 9.31e-05 | 8,398 tok/s | elapsed 347.7m | ETA 154.9m
+  step  18300/26310 | loss 0.9528 | lr 9.10e-05 | 8,720 tok/s | elapsed 349.6m | ETA 153.0m
+  step  18400/26310 | loss 0.9327 | lr 8.89e-05 | 8,621 tok/s | elapsed 351.4m | ETA 151.1m
+  step  18500/26310 | loss 1.0282 | lr 8.68e-05 | 8,524 tok/s | elapsed 353.2m | ETA 149.1m
+  step  18600/26310 | loss 0.8406 | lr 8.48e-05 | 8,731 tok/s | elapsed 355.1m | ETA 147.2m
+  step  18700/26310 | loss 0.9558 | lr 8.28e-05 | 8,425 tok/s | elapsed 356.9m | ETA 145.3m
+  step  18800/26310 | loss 0.8387 | lr 8.08e-05 | 8,480 tok/s | elapsed 358.8m | ETA 143.3m
+  step  18900/26310 | loss 0.9350 | lr 7.88e-05 | 8,763 tok/s | elapsed 360.6m | ETA 141.4m
+  step  19000/26310 | loss 0.9950 | lr 7.68e-05 | 8,637 tok/s | elapsed 362.5m | ETA 139.5m
+  step  19100/26310 | loss 0.8525 | lr 7.49e-05 | 8,658 tok/s | elapsed 364.3m | ETA 137.5m
+  step  19200/26310 | loss 0.9378 | lr 7.30e-05 | 8,684 tok/s | elapsed 366.1m | ETA 135.6m
+
+[epoch 11] Running validation …
+[epoch 11] val_loss = 0.9277  (best so far: 0.9404)
+
+============================================================
+  GENERATED MOLECULES — Step 19294
+============================================================
+  [0] ✓ C=CN(CCNC(=O)[C@H]1CCN[C@@H](c2ccccc2F)C(CNC2(O)C=CC=CC2)C1)c1ccc
+  [1] ✓ CC=CC=C1CC(N=CC)c2cccc(C(=O)N(C)c3ccncc3C(C)C)c2C(=O)NCCCNS1(=O)=
+  [2] ✓ C=CC=NCCCCC(=CC=CC)S(=O)(=O)NCCNC(=O)NC=NN=C(C(=C)C(F)(F)F)c1cccc
+  [3] ✓ CCCC=C1COc2ccc(cc2C)S(=O)(=O)NC[CH]NC(=O)C=Cc2ccccc2C(=O)N1
+  [4] ✓ C=CC1=C2NC(=O)CCN3C(=O)CCC(NC(=O)C4=CC=[NH+]C=C5CCCOCCC54)C3CC2=C
+  [5] ✓ C[C@H](C(=O)N1CC1CCC1=CC=CCON=CO1)[C@@H](C)NC(=O)[C@H](C)N1CCN(c2
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=0.9277)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 12/15
+──────────────────────────────────────────────────────────────────────
+  step  19300/26310 | loss 0.8656 | lr 7.11e-05 | 8,658 tok/s | elapsed 369.0m | ETA 134.0m
+  step  19400/26310 | loss 0.9587 | lr 6.92e-05 | 8,743 tok/s | elapsed 370.8m | ETA 132.1m
+  step  19500/26310 | loss 1.1168 | lr 6.73e-05 | 8,370 tok/s | elapsed 372.7m | ETA 130.2m
+  step  19600/26310 | loss 0.9643 | lr 6.54e-05 | 8,700 tok/s | elapsed 374.5m | ETA 128.2m
+  step  19700/26310 | loss 0.9536 | lr 6.36e-05 | 8,699 tok/s | elapsed 376.3m | ETA 126.3m
+  step  19800/26310 | loss 0.9610 | lr 6.18e-05 | 8,660 tok/s | elapsed 378.2m | ETA 124.3m
+  step  19900/26310 | loss 1.0664 | lr 6.00e-05 | 8,712 tok/s | elapsed 380.0m | ETA 122.4m
+  step  20000/26310 | loss 0.9867 | lr 5.83e-05 | 8,706 tok/s | elapsed 381.8m | ETA 120.5m
+  step  20100/26310 | loss 1.0332 | lr 5.65e-05 | 8,726 tok/s | elapsed 383.6m | ETA 118.5m
+  step  20200/26310 | loss 0.8962 | lr 5.48e-05 | 8,760 tok/s | elapsed 385.4m | ETA 116.6m
+  step  20300/26310 | loss 0.8933 | lr 5.31e-05 | 8,726 tok/s | elapsed 387.3m | ETA 114.7m
+  step  20400/26310 | loss 0.9929 | lr 5.14e-05 | 8,718 tok/s | elapsed 389.1m | ETA 112.7m
+  step  20500/26310 | loss 0.9355 | lr 4.98e-05 | 8,718 tok/s | elapsed 390.9m | ETA 110.8m
+  step  20600/26310 | loss 1.0769 | lr 4.82e-05 | 8,470 tok/s | elapsed 392.7m | ETA 108.9m
+  step  20700/26310 | loss 0.9887 | lr 4.66e-05 | 8,746 tok/s | elapsed 394.5m | ETA 106.9m
+  step  20800/26310 | loss 0.8698 | lr 4.50e-05 | 8,654 tok/s | elapsed 396.4m | ETA 105.0m
+  step  20900/26310 | loss 0.9182 | lr 4.34e-05 | 8,714 tok/s | elapsed 398.2m | ETA 103.1m
+  step  21000/26310 | loss 0.9163 | lr 4.19e-05 | 8,317 tok/s | elapsed 400.1m | ETA 101.2m
+
+[epoch 12] Running validation …
+[epoch 12] val_loss = 0.9210  (best so far: 0.9277)
+
+============================================================
+  GENERATED MOLECULES — Step 21048
+============================================================
+  [0] ✓ CNN=NC=C(NC(=CCCO)C(=O)N1CCN(c2ccc(F)cc2)CC1)S(=O)(=O)NCCC(C)=O
+  [1] ✓ CC=CC=C1CCN(CC)C(CN(C)c2ccc(-c3ccccc3)cn2)CC(=O)NCCN[CH]C(=O)N1
+  [2] ✓ CCC=CC=CC1NC(=O)[CH]C2CN(Cc3ccccc3)C(=O)c3ccccc3S(=O)(=O)N(C2)C1=
+  [3] ✓ CC=CC=CNC(=O)[CH]NC=C=CC(=O)N1CC=Nc2ccccc2N=CC2=CC=CNC2C1
+  [4] ✓ CCCCC=C(O)NC(=O)C=CC=CNC(=O)C(=O)NC1CCN(c2ccc(F)c[nH+]2)CC1
+  [5] ✓ CN1C(=O)c2ccccc2C2OC=CC=CC2NC(=O)C=CC=CCS(=O)(=O)N(N)C1=O
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=0.9210)
+  💾 Periodic checkpoint → upscaled_epoch_12.pt
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 13/15
+──────────────────────────────────────────────────────────────────────
+  step  21100/26310 | loss 0.8809 | lr 4.04e-05 | 8,598 tok/s | elapsed 403.0m | ETA 99.5m
+  step  21200/26310 | loss 1.0178 | lr 3.89e-05 | 8,463 tok/s | elapsed 404.8m | ETA 97.6m
+  step  21300/26310 | loss 0.9271 | lr 3.74e-05 | 8,768 tok/s | elapsed 406.7m | ETA 95.7m
+  step  21400/26310 | loss 0.9319 | lr 3.60e-05 | 5,171 tok/s | elapsed 409.6m | ETA 94.0m
+  step  21500/26310 | loss 0.8788 | lr 3.46e-05 | 8,382 tok/s | elapsed 412.1m | ETA 92.2m
+  step  21600/26310 | loss 0.8995 | lr 3.32e-05 | 8,689 tok/s | elapsed 414.0m | ETA 90.3m
+  step  21700/26310 | loss 0.9480 | lr 3.19e-05 | 8,768 tok/s | elapsed 415.8m | ETA 88.3m
+  step  21800/26310 | loss 0.9623 | lr 3.05e-05 | 8,314 tok/s | elapsed 417.6m | ETA 86.4m
+  step  21900/26310 | loss 1.0239 | lr 2.92e-05 | 8,720 tok/s | elapsed 419.4m | ETA 84.5m
+  step  22000/26310 | loss 0.9054 | lr 2.79e-05 | 8,736 tok/s | elapsed 421.2m | ETA 82.5m
+  step  22100/26310 | loss 0.9549 | lr 2.67e-05 | 8,705 tok/s | elapsed 423.1m | ETA 80.6m
+  step  22200/26310 | loss 1.0800 | lr 2.55e-05 | 8,713 tok/s | elapsed 424.9m | ETA 78.7m
+  step  22300/26310 | loss 0.8661 | lr 2.43e-05 | 8,773 tok/s | elapsed 426.7m | ETA 76.7m
+  step  22400/26310 | loss 0.9630 | lr 2.31e-05 | 8,817 tok/s | elapsed 428.5m | ETA 74.8m
+  step  22500/26310 | loss 0.8720 | lr 2.20e-05 | 8,816 tok/s | elapsed 430.3m | ETA 72.9m
+  step  22600/26310 | loss 0.9188 | lr 2.08e-05 | 8,742 tok/s | elapsed 432.1m | ETA 70.9m
+  step  22700/26310 | loss 0.9522 | lr 1.97e-05 | 8,733 tok/s | elapsed 433.9m | ETA 69.0m
+  step  22800/26310 | loss 0.8534 | lr 1.87e-05 | 8,747 tok/s | elapsed 435.7m | ETA 67.1m
+
+[epoch 13] Running validation …
+[epoch 13] val_loss = 0.9191  (best so far: 0.9210)
+
+============================================================
+  GENERATED MOLECULES — Step 22802
+============================================================
+  [0] ✓ C[CH]C=CC=CC(=O)CNCCNC(=O)NC[C@H](C)CCCN(CC)C(=O)c1ccc(C)cc1
+  [1] ✓ CCN1CCNS(=O)(=O)C2=CNCCC[SH](S2)n2c(=O)c3ccccc3n2NC2=CC=CC(C=C2)C
+  [2] ✓ CN=CC(C)(C=O)C(=O)SCO[CH]C(=O)N1CCN(c2ncnc[nH+]2)CC1
+  [3] ✓ CC=NC1CN[C@@H]2CC2CCC2=CN(C1)S(=O)(=O)N(C)C1(F)C=CC=C(F)[C@H]1CC(
+  [4] ✓ CC1CCCCN(C2CCN(S(=O)(=O)c3ccc4c(c3)CCO4)CC2)CCCNC(=O)NC=NNCC1
+  [5] ✓ O=CCCO
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=0.9191)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 14/15
+──────────────────────────────────────────────────────────────────────
+  step  22900/26310 | loss 0.8477 | lr 1.76e-05 | 8,598 tok/s | elapsed 438.7m | ETA 65.3m
+  step  23000/26310 | loss 0.7350 | lr 1.66e-05 | 8,466 tok/s | elapsed 440.5m | ETA 63.4m
+  step  23100/26310 | loss 0.9308 | lr 1.57e-05 | 8,542 tok/s | elapsed 442.4m | ETA 61.5m
+  step  23200/26310 | loss 1.0018 | lr 1.47e-05 | 8,535 tok/s | elapsed 444.3m | ETA 59.6m
+  step  23300/26310 | loss 0.9923 | lr 1.38e-05 | 8,407 tok/s | elapsed 446.2m | ETA 57.6m
+  step  23400/26310 | loss 1.0894 | lr 1.29e-05 | 8,713 tok/s | elapsed 448.1m | ETA 55.7m
+  step  23500/26310 | loss 0.7512 | lr 1.20e-05 | 8,808 tok/s | elapsed 449.8m | ETA 53.8m
+  step  23600/26310 | loss 1.0119 | lr 1.12e-05 | 8,773 tok/s | elapsed 451.6m | ETA 51.9m
+  step  23700/26310 | loss 0.9806 | lr 1.04e-05 | 8,560 tok/s | elapsed 453.5m | ETA 49.9m
+  step  23800/26310 | loss 0.8580 | lr 9.63e-06 | 8,765 tok/s | elapsed 455.3m | ETA 48.0m
+  step  23900/26310 | loss 0.9253 | lr 8.88e-06 | 8,749 tok/s | elapsed 457.1m | ETA 46.1m
+  step  24000/26310 | loss 0.9243 | lr 8.17e-06 | 8,739 tok/s | elapsed 459.0m | ETA 44.2m
+  step  24100/26310 | loss 0.9051 | lr 7.48e-06 | 8,832 tok/s | elapsed 460.8m | ETA 42.3m
+  step  24200/26310 | loss 1.0399 | lr 6.82e-06 | 7,585 tok/s | elapsed 462.7m | ETA 40.3m
+  step  24300/26310 | loss 0.9572 | lr 6.19e-06 | 8,629 tok/s | elapsed 464.7m | ETA 38.4m
+  step  24400/26310 | loss 0.9175 | lr 5.59e-06 | 8,837 tok/s | elapsed 466.5m | ETA 36.5m
+  step  24500/26310 | loss 0.9679 | lr 5.03e-06 | 8,738 tok/s | elapsed 468.3m | ETA 34.6m
+
+[epoch 14] Running validation …
+[epoch 14] val_loss = 0.9061  (best so far: 0.9191)
+
+============================================================
+  GENERATED MOLECULES — Step 24556
+============================================================
+  [0] ✓ CN1OC=C2C#CC=CC=CCCC3(C=NC3CC(=O)N(Cc3ccc(F)cc3)C=NC2)C1=O
+  [1] ✓ O=C1OCC2=NC=C(CNC=C2)C(=O)[C@@H](c2cc(=O)n(-c3ccccc3)[nH]2)C2CCC3
+  [2] ✓ NN1CSC=CC=CCCC1=O
+  [3] ✓ CC1(C)[C](C=O)C(=C2CCCCC2)C(=O)C=CC[C@@H]1NC(=O)CC1C(=O)N(c2ccccn
+  [4] ✓ CC=CCC1NC(=O)[CH]CCCN(C)C(=O)C[C@H]2CN(c3ccc4c(c3)CCC(=O)N4)CCC2O
+  [5] ✓ CC=CC=C1NC(=O)C=CC=C(S(=O)(=O)N2CCN(C(=O)C=C3C=C(F)C(F)=C3)CC2)C=
+
+  Valid: 6/6 (100%)
+============================================================
+
+  ✓ New best → best_model_upscaled.pt  (val_loss=0.9061)
+
+──────────────────────────────────────────────────────────────────────
+  Epoch 15/15
+──────────────────────────────────────────────────────────────────────
+  step  24600/26310 | loss 0.9251 | lr 4.49e-06 | 8,677 tok/s | elapsed 471.1m | ETA 32.7m
+  step  24700/26310 | loss 1.0392 | lr 3.98e-06 | 8,687 tok/s | elapsed 472.9m | ETA 30.8m
+  step  24800/26310 | loss 0.8395 | lr 3.50e-06 | 8,852 tok/s | elapsed 474.7m | ETA 28.9m
+  step  24900/26310 | loss 1.0080 | lr 3.06e-06 | 8,842 tok/s | elapsed 476.5m | ETA 27.0m
+  step  25000/26310 | loss 0.9857 | lr 2.64e-06 | 8,743 tok/s | elapsed 478.3m | ETA 25.1m
+  step  25100/26310 | loss 0.8778 | lr 2.25e-06 | 8,824 tok/s | elapsed 480.1m | ETA 23.1m
+  step  25200/26310 | loss 0.8990 | lr 1.90e-06 | 8,821 tok/s | elapsed 481.9m | ETA 21.2m
+  step  25300/26310 | loss 1.0365 | lr 1.57e-06 | 7,487 tok/s | elapsed 483.9m | ETA 19.3m
+  step  25400/26310 | loss 0.8869 | lr 1.27e-06 | 8,175 tok/s | elapsed 485.9m | ETA 17.4m
+  step  25500/26310 | loss 0.9809 | lr 1.01e-06 | 8,189 tok/s | elapsed 487.9m | ETA 15.5m
+  step  25600/26310 | loss 0.8644 | lr 7.76e-07 | 7,676 tok/s | elapsed 490.0m | ETA 13.6m
+  step  25700/26310 | loss 0.9261 | lr 5.73e-07 | 7,744 tok/s | elapsed 492.1m | ETA 11.7m
+  step  25800/26310 | loss 0.9189 | lr 4.01e-07 | 7,650 tok/s | elapsed 494.2m | ETA 9.8m
+  step  25900/26310 | loss 0.9461 | lr 2.59e-07 | 8,106 tok/s | elapsed 496.2m | ETA 7.9m
+  step  26000/26310 | loss 0.8894 | lr 1.48e-07 | 8,005 tok/s | elapsed 498.2m | ETA 5.9m
+  step  26100/26310 | loss 0.8111 | lr 6.79e-08 | 7,256 tok/s | elapsed 500.4m | ETA 4.0m
+  step  26200/26310 | loss 0.9045 | lr 1.86e-08 | 7,418 tok/s | elapsed 502.5m | ETA 2.1m
+  step  26300/26310 | loss 0.7562 | lr 1.54e-10 | 7,260 tok/s | elapsed 504.6m | ETA 0.2m
+
+[epoch 15] Running validation …
+[epoch 15] val_loss = 0.9149  (best so far: 0.9061)
+
+============================================================
+  GENERATED MOLECULES — Step 26310
+============================================================
+  [0] ✓ C=C=CC(=CC=COC)OC(=O)C=CCC12CNC(=O)c3cc(c4c(c3)OCCO4)N=CC3COCCN3[
+  [1] ✓ [CH][CH]SC1=CC=COCCC2=CC3C(=O)N(C3=CCC1=O)c1ccc(cc1-c1ccccc1)-c1c
+  [2] ✓ NCC1=NC2=NN=CC(OSc3c(cccc3C(=O)NC3Cc4ccccc4C3)C2)C2C=CC1=CN2
+  [3] ✓ [CH]C(=O)N(C(=O)c1ccc(-c2ccc(Cl)cc2)cc1)C(C)=C(O)n1cnc(C)n1
+  [4] ✓ CC=CC1=CC(=COC)C(=O)N2CCN(C(=O)[CH]C=C(N)NN3Cc4ccccc43)CCN(C2)NC1
+  [5] ✓ CC=CC=C1C2=C1NC1CC(C(=O)Nc3cccc(CCCO)c3)CC(=NCC(C)=O)N1C(=O)CCC(=
+
+  Valid: 6/6 (100%)
+============================================================
+
+  💾 Periodic checkpoint → upscaled_epoch_15.pt
+
+======================================================================
+  Pretraining complete.
+  Best val loss : 0.9061
+  Log saved     : /Users/lirobert/Documents/UdeM/IFT6759 (Advanced Machine Learning Projects)/molgen/outputs/pretrain_upscaled_log.csv
+  Checkpoint    : /Users/lirobert/Documents/UdeM/IFT6759 (Advanced Machine Learning Projects)/molgen/checkpoints/best_model_upscaled.pt
+======================================================================
+[plot] Saved 3 plots → /Users/lirobert/Documents/UdeM/IFT6759 (Advanced Machine Learning Projects)/molgen/outputs/plots/pretrain_upscaled/

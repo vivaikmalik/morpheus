@@ -1,0 +1,15 @@
+============================================================
+  MODEL EVALUATION
+  CFG=2.0  Temp=0.6  Steps=50
+  Molecules evaluated : 750
+============================================================
+  Validity (%)                              100.0%
+  Exact Match (%)                           0.0%
+  Scaffold Match — valid pairs (%)          0.7%
+  BLEU Score (avg)                          0.2467
+  Levenshtein Distance (avg)                45.98
+  Normalised Levenshtein (avg)              0.6453
+  Tanimoto Similarity (avg, all)            0.1560
+  Tanimoto Similarity (avg, valid pairs)    0.1560
+  Token Retention Rate (avg, generated)     0.9120
+============================================================

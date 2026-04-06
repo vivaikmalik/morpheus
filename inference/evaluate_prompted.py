@@ -14,12 +14,15 @@ For each prompt, generates one molecule via MaskGIT + CFG, then computes:
 Usage:
     python inference/evaluate_prompted.py
     python inference/evaluate_prompted.py --cfg 2.0 --temp 0.8 --steps 50
-    python inference/evaluate_prompted.py --checkpoint checkpoints/best_chebi20_model.pt \\
+    python inference/evaluate_prompted.py --checkpoint checkpoints/chebi20_27M_frozen.pt \\
                                           --test_csv data/chebi20_test.csv
-    python inference/evaluate_prompted.py --checkpoint checkpoints/best_chebi20_model.pt \\
+    python inference/evaluate_prompted.py --checkpoint checkpoints/chebi20_27M_frozen.pt \\
                                           --test_csv data/chebi20_test.csv --eos_truncate
 
-Output CSV: outputs/eval_{ckpt_stem}_cfg{X}_temp{Y}_steps{Z}[_eost].csv
+Outputs:
+    outputs/eval_cfg{X}_t{Y}_s{Z}.csv
+    outputs/eval_summary_cfg{X}_t{Y}_s{Z}.txt
+    (append _eost to both if --eos_truncate)
 """
 
 import argparse
@@ -48,7 +51,7 @@ from tokenizer.chemicalTokenizer import ChemicalTokenizer
 # =============================================================================
 
 PROJECT_ROOT       = Path(__file__).parent.parent
-DEFAULT_CHECKPOINT = PROJECT_ROOT / "checkpoints" / "best_finetuned_model.pt"
+DEFAULT_CHECKPOINT = PROJECT_ROOT / "checkpoints" / "molinst_27M_frozen.pt"
 TOKENIZER_PATH     = PROJECT_ROOT / "chemical_tokenizer.json"
 DEFAULT_TEST_CSV   = PROJECT_ROOT / "data" / "test.csv"
 GEN_CFG = {
@@ -430,6 +433,54 @@ def print_summary(df: pd.DataFrame):
 
 
 # =============================================================================
+# SUMMARY FILE
+# =============================================================================
+
+def _save_summary_txt(df: pd.DataFrame, path: Path, args):
+    n     = len(df)
+    valid = df[df["valid"]]
+    valid_pairs = df[df["valid"] & df["gt_selfies"].notna()]
+
+    def pct(x): return f"{x:.1f}%"
+
+    validity     = 100 * len(valid) / n
+    exact_pct    = 100 * df["exact_match"].mean()
+    scaffold_pct = (100 * valid_pairs["scaffold_match"].mean()
+                    if len(valid_pairs) else float("nan"))
+    bleu_avg     = df["bleu"].mean()
+    lev_avg      = df["levenshtein"].mean()
+    norm_lev_avg = df["norm_levenshtein"].mean()
+    tan_all      = df["tanimoto"].mean()
+    tan_valid    = (valid_pairs["tanimoto"].mean()
+                   if len(valid_pairs) else float("nan"))
+    tok_ret_avg  = df["token_retention"].dropna().mean()
+
+    lines = [
+        "=" * 60,
+        f"  MODEL EVALUATION",
+        f"  CFG={args.cfg}  Temp={args.temp}  Steps={args.steps}"
+        + ("  [eos_truncate]" if args.eos_truncate else ""),
+        f"  Molecules evaluated : {n}",
+        "=" * 60,
+        f"  Validity (%)                              {validity:.1f}%",
+        f"  Exact Match (%)                           {exact_pct:.1f}%",
+        f"  Scaffold Match — valid pairs (%)          {scaffold_pct:.1f}%",
+        f"  BLEU Score (avg)                          {bleu_avg:.4f}",
+        f"  Levenshtein Distance (avg)                {lev_avg:.2f}",
+        f"  Normalised Levenshtein (avg)              {norm_lev_avg:.4f}",
+        f"  Tanimoto Similarity (avg, all)            {tan_all:.4f}",
+        f"  Tanimoto Similarity (avg, valid pairs)    {tan_valid:.4f}",
+        f"  Token Retention Rate (avg, generated)     {tok_ret_avg:.4f}",
+        "=" * 60,
+    ]
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"[out] Summary → {path}")
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
 
@@ -443,7 +494,7 @@ def main():
                         help="MaskGIT denoising steps (default: 32)")
     parser.add_argument("--checkpoint", type=str, default=None,
                         help="Path to checkpoint .pt file "
-                             "(default: checkpoints/best_finetuned_model.pt)")
+                             "(default: checkpoints/molinst_27M_frozen.pt)")
     parser.add_argument("--test_csv", type=str, default=None,
                         help="Path to test CSV with 'prompt' and 'response' columns "
                              "(default: data/test.csv)")
@@ -451,6 +502,10 @@ def main():
                         help="Post-hoc EOS truncation: run one forward pass at t=0 "
                              "and truncate each sequence at the position with highest "
                              "EOS probability")
+    parser.add_argument("--encoder", type=str, default="frozen",
+                        help="Encoder tag for output filenames (default: frozen)")
+    parser.add_argument("--model_size", type=str, default="27M",
+                        help="Model size tag for output filenames (default: 27M)")
     args = parser.parse_args()
 
     checkpoint_path = (Path(args.checkpoint) if args.checkpoint
@@ -466,11 +521,21 @@ def main():
     GEN_CFG["temperature"] = args.temp
     GEN_CFG["num_steps"]   = args.steps
 
-    ckpt_stem  = checkpoint_path.stem
-    eost_tag   = "_eost" if args.eos_truncate else ""
-    output_csv = (PROJECT_ROOT / "outputs" /
-                  f"eval_{ckpt_stem}_cfg{args.cfg}_temp{args.temp}"
-                  f"_steps{args.steps}{eost_tag}.csv")
+    # Derive dataset prefix from test CSV filename
+    _csv_stem = test_csv_path.stem   # e.g. "test", "chebi20_test"
+    if _csv_stem == "test":
+        dataset_prefix = "molinst"
+    elif "chebi20" in _csv_stem:
+        dataset_prefix = "chebi20"
+    else:
+        dataset_prefix = _csv_stem
+
+    run_prefix = f"{dataset_prefix}_{args.model_size}_{args.encoder}"
+    tag = f"_cfg{args.cfg}_t{args.temp}_s{args.steps}"
+    if args.eos_truncate:
+        tag += "_eost"
+    output_csv = PROJECT_ROOT / "outputs" / f"{run_prefix}_eval{tag}.csv"
+    output_txt = PROJECT_ROOT / "outputs" / f"{run_prefix}_eval_summary{tag}.txt"
 
     # Device
     if torch.cuda.is_available():
@@ -484,7 +549,7 @@ def main():
     print(f"[data]   {test_csv_path}")
     print(f"[config] cfg={args.cfg}  temp={args.temp}  steps={args.steps}  "
           f"eos_truncate={args.eos_truncate}")
-    print(f"[output] {output_csv.name}")
+    print(f"[output] {output_csv.name}  |  {output_txt.name}")
 
     # Tokenizers
     tokenizer    = ChemicalTokenizer(TOKENIZER_PATH)
@@ -539,13 +604,14 @@ def main():
 
     df_out = pd.DataFrame(rows)
 
-    # Save
+    # Save CSV
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     df_out.to_csv(output_csv, index=False)
     print(f"[out] Saved {len(df_out)} rows → {output_csv}")
 
-    # Summary
+    # Summary (console + txt)
     print_summary(df_out)
+    _save_summary_txt(df_out, output_txt, args)
 
 
 if __name__ == "__main__":

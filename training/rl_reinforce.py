@@ -4,7 +4,7 @@ REINFORCE fine-tuning for molecular property optimisation (QED + diversity).
 Usage
 -----
     python training/rl_reinforce.py \\
-        --checkpoint checkpoints/best_model.pt \\
+        --checkpoint checkpoints/zinc_5M_pretrain.pt \\
         --num_steps  500   \\
         --batch_size 32    \\
         --diversity_weight 0.3 \\
@@ -218,7 +218,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="REINFORCE fine-tuning for molecular QED optimisation"
     )
-    parser.add_argument("--checkpoint",       default="checkpoints/best_model.pt",
+    parser.add_argument("--checkpoint",       default="checkpoints/zinc_5M_pretrain.pt",
                         help="Path to pretrained checkpoint (relative to project root)")
     parser.add_argument("--num_steps",        type=int,   default=500)
     parser.add_argument("--batch_size",       type=int,   default=32)
@@ -365,7 +365,7 @@ def main():
 
         # 10. Checkpoint every 100 steps
         if step % 100 == 0:
-            ckpt_path = checkpoint_dir / f"rl_step_{step}.pt"
+            ckpt_path = checkpoint_dir / f"zinc_5M_rl_v1_step{step}.pt"
             torch.save({
                 "step"     : step,
                 "model"    : model.state_dict(),

@@ -7,7 +7,7 @@ Paste this file into a Kaggle notebook cell and run:
     !python kaggle_eos_fix.py
 
 Kaggle dataset expected at /kaggle/input/morpheus-molgen/ containing:
-  - best_finetuned_model.pt
+  - molinst_27M_frozen_no_eos.pt
   - chemical_tokenizer.json
   - train.csv  (columns: prompt, response)
   - val.csv    (columns: prompt, response)
@@ -49,7 +49,7 @@ INPUT_DIR  = Path("/kaggle/input/morpheus-molgen")
 OUTPUT_DIR = Path("/kaggle/working")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-CKPT_RESUME    = INPUT_DIR  / "best_finetuned_model.pt"
+CKPT_RESUME    = INPUT_DIR  / "molinst_27M_frozen_no_eos.pt"
 TOKENIZER_PATH = INPUT_DIR  / "chemical_tokenizer.json"
 TRAIN_CSV      = INPUT_DIR  / "train.csv"
 VAL_CSV        = INPUT_DIR  / "val.csv"

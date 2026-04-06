@@ -2,7 +2,7 @@
 kaggle_full_finetune.py
 -----------------------
 Fresh fine-tune of the 27M Morpheus model on ChEBI-20 from the pretrained
-best_model_upscaled.pt checkpoint. Self-contained for Kaggle T4.
+zinc_17M_pretrain.pt checkpoint. Self-contained for Kaggle T4.
 
 Paste this file into a Kaggle notebook cell and run:
     !python kaggle_full_finetune.py
@@ -10,14 +10,14 @@ Paste this file into a Kaggle notebook cell and run:
 
 Kaggle dataset expected at /kaggle/input/datasets/ift6390robli/morpheus-molgen/
 containing:
-  - best_model_upscaled.pt        (pretrain checkpoint, loaded strict=False)
+  - zinc_17M_pretrain.pt          (pretrain checkpoint, loaded strict=False)
   - chemical_tokenizer.json
   - train.csv   (columns: prompt, response)
   - val.csv     (columns: prompt, response)
 
 Outputs written to /kaggle/working/
   - best_finetuned_eos_correct.pt      (best val-loss model)
-  - finetuned_epoch_{N}.pt             (full state per epoch, for resume)
+  - molinst_27M_frozen_epoch{N}.pt     (full state per epoch, for resume)
   - finetune_full_log.csv
   - plots_full/loss_curves.png, lr_schedule.png
   - finetune_full_samples.txt
@@ -57,12 +57,12 @@ INPUT_DIR  = Path("/kaggle/input/datasets/ift6390robli/morpheus-molgen")
 OUTPUT_DIR = Path("/kaggle/working")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-PRETRAIN_CKPT  = INPUT_DIR  / "best_model_upscaled.pt"
+PRETRAIN_CKPT  = INPUT_DIR  / "zinc_17M_pretrain.pt"
 TOKENIZER_PATH = INPUT_DIR  / "chemical_tokenizer.json"
 TRAIN_CSV      = INPUT_DIR  / "train.csv"
 VAL_CSV        = INPUT_DIR  / "val.csv"
 
-CKPT_SAVE      = OUTPUT_DIR / "best_finetuned_eos_correct.pt"
+CKPT_SAVE      = OUTPUT_DIR / "molinst_27M_frozen.pt"
 LOG_PATH       = OUTPUT_DIR / "finetune_full_log.csv"
 PLOT_DIR       = OUTPUT_DIR / "plots_full"
 SAMPLES_PATH   = OUTPUT_DIR / "finetune_full_samples.txt"
@@ -427,8 +427,8 @@ def diffusion_loss(logits, labels, timesteps,
 # RESUME: find latest epoch checkpoint in OUTPUT_DIR
 # =============================================================================
 def find_latest_epoch_ckpt():
-    """Return (path, epoch_num) of the highest-numbered finetuned_epoch_*.pt, or (None, 0)."""
-    candidates = sorted(OUTPUT_DIR.glob("finetuned_epoch_*.pt"))
+    """Return (path, epoch_num) of the highest-numbered molinst_27M_frozen_epoch*.pt, or (None, 0)."""
+    candidates = sorted(OUTPUT_DIR.glob("molinst_27M_frozen_epoch*.pt"))
     if not candidates:
         return None, 0
     latest = candidates[-1]
@@ -914,7 +914,7 @@ def train(do_resume: bool):
             break
 
         # ── Periodic checkpoint every epoch (enables Kaggle disconnect resume) ──
-        epoch_ckpt_path = OUTPUT_DIR / f"finetuned_epoch_{epoch+1}.pt"
+        epoch_ckpt_path = OUTPUT_DIR / f"molinst_27M_frozen_epoch{epoch+1}.pt"
         torch.save({
             "epoch"         : epoch + 1,
             "step"          : global_step,
@@ -940,6 +940,6 @@ def train(do_resume: bool):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", action="store_true",
-                        help="Resume from the latest finetuned_epoch_*.pt in /kaggle/working/")
+                        help="Resume from the latest molinst_27M_frozen_epoch*.pt in /kaggle/working/")
     args = parser.parse_args()
     train(do_resume=args.resume)
