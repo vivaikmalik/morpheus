@@ -93,6 +93,12 @@ class MolecularDiffusionModel(nn.Module):
     def get_text_embeddings(self, text_input_ids, text_attention_mask):
         """ Runs the text encoder and projects the embeddings.
         Gradients flow through the encoder only when it has trainable parameters. """
+        # BERT has a hard 512-token limit; truncate silently if inputs exceed it
+        max_bert_len = self.text_encoder.config.max_position_embeddings
+        if text_input_ids.shape[1] > max_bert_len:
+            text_input_ids    = text_input_ids[:, :max_bert_len]
+            text_attention_mask = text_attention_mask[:, :max_bert_len]
+
         encoder_frozen = not any(p.requires_grad for p in self.text_encoder.parameters())
         ctx = torch.no_grad() if encoder_frozen else torch.enable_grad()
         with ctx:
