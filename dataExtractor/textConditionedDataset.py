@@ -6,18 +6,24 @@ class TextConditionedDataset(Dataset):
     """
     Dataset for text → molecule fine-tuning.
 
-    Expects a DataFrame with columns:
-        - 'selfies': the SELFIES string of the molecule
-        - 'description': the natural language description (text prompt)
+    Two modes:
+      1. Pre-computed SciBERT: loads hidden states from .pt file (fast, no SciBERT on GPU)
+      2. Raw text: returns description string for collator to tokenize (legacy)
 
-    Returns tokenized SELFIES (padded to max_length) and the raw text string.
-    Text tokenization is deferred to the collator for efficient batching.
+    Parameters
+    ----------
+    df : DataFrame with 'selfies' and 'description' columns
+    tokenizer : ChemicalTokenizer (SELFIES)
+    max_length : int, max SELFIES sequence length
+    scibert_states : dict or None, pre-computed SciBERT hidden states
+                     keyed by DataFrame row index → {states, mask}
     """
-    def __init__(self, df, tokenizer, max_length=74):
+    def __init__(self, df, tokenizer, max_length=74, scibert_states=None):
         self.tokenizer  = tokenizer
         self.max_length = max_length
         self.selfies    = df["selfies"].tolist()
         self.prompts    = df["description"].tolist()
+        self.scibert_states = scibert_states
 
     def __len__(self):
         return len(self.selfies)
@@ -40,10 +46,17 @@ class TextConditionedDataset(Dataset):
             )
             input_ids = torch.cat([input_ids, padding])
         else:
-            # Truncate if somehow longer (shouldn't happen with filtered data)
             input_ids = input_ids[:self.max_length]
 
-        return {
-            "input_ids": input_ids,        # (max_length,) SELFIES token IDs
-            "prompt":    self.prompts[idx], # raw text string
+        result = {
+            "input_ids": input_ids,        # (max_length,)
+            "prompt":    self.prompts[idx], # raw text string (for legacy/eval)
         }
+
+        # If pre-computed SciBERT states are available, include them
+        if self.scibert_states is not None:
+            entry = self.scibert_states[idx]
+            result["scibert_states"] = entry["states"]  # (text_len, 768)
+            result["scibert_mask"]   = entry["mask"]    # (text_len,) True=PAD
+
+        return result

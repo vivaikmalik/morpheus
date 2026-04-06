@@ -25,10 +25,10 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 CONFIG = {
     # Model
     "vocab_size"  : 110,
-    "hidden_size" : 768,
-    "num_heads"   : 12,
-    "ffn_dim"     : 3072,
-    "num_layers"  : 16,
+    "hidden_size" : 1024,
+    "num_heads"   : 16,
+    "ffn_dim"     : 4096,
+    "num_layers"  : 12,
     "max_length"  : 74,
     "dropout"     : 0.1,
 
@@ -38,7 +38,7 @@ CONFIG = {
     # Training
     "batch_size"           : 128,
     "gradient_accumulation": 2,
-    "learning_rate"        : 3e-4,
+    "learning_rate"        : 5e-5,
     "weight_decay"         : 0.01,
     "max_grad_norm"        : 1.0,
     "num_epochs"           : 55,

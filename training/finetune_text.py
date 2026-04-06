@@ -3,20 +3,14 @@ training/finetune_text.py
 --------------------------
 Fine-tunes pretrained Morpheus on CheBI-20 for text-conditioned generation.
 
-The pretrained model has cross-attention acting as a 2nd self-attention
-(Q=molecule, K=molecule, V=molecule). During fine-tuning:
-
-  - Cross-attention K and V projections adapt from molecule→text input
-  - Cross-attention Q and out_proj are FROZEN (transfer directly)
-  - All self-attention, FFN, embeddings, norms are FROZEN
-  - Text projector MLP and null token train from scratch
-  - SciBERT is frozen
-
-This is an extremely targeted fine-tune: only the K/V projections in each
-block need to learn "text looks like this instead of molecule." Everything
-else already works.
+Key changes from previous version:
+  - Pre-computed SciBERT embeddings (no SciBERT on GPU during training)
+  - 60K+ training steps (TGM-DLM uses 200K)
+  - No timestep weighting in loss
+  - Differential LR: 3e-4 for new modules, 5e-6 for pretrained
 
 Usage:
+    python scripts/precompute_scibert.py   # run once first
     python training/finetune_text.py
     python training/finetune_text.py --checkpoint checkpoints/best_model.pt
 """
@@ -53,10 +47,10 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 CONFIG = {
     # Model (must match pretrained checkpoint)
     "vocab_size"  : 110,
-    "hidden_size" : 768,
-    "num_heads"   : 12,
-    "ffn_dim"     : 3072,
-    "num_layers"  : 16,
+    "hidden_size" : 1024,
+    "num_heads"   : 16,
+    "ffn_dim"     : 4096,
+    "num_layers"  : 12,
     "max_length"  : 74,
     "dropout"     : 0.1,
 
@@ -65,27 +59,28 @@ CONFIG = {
     "max_text_len"  : 256,
     "uncond_prob"   : 0.1,
 
-    # Fine-tuning
-    "batch_size"           : 32,
-    "gradient_accumulation": 2,
-    "new_lr": 3e-4, # cross-attn, text_proj, null_token, norm_cross
-    "pretrained_lr": 1e-4, # everything else (pretrained) — very gentle to preserve knowledge
-    "weight_decay"         : 0.01,
-    "max_grad_norm"        : 1.33,
-    "num_epochs"           : 66,
-    "warmup_ratio"         : 0.1,
+    # Fine-tuning — differential LR, long training
+    "batch_size"           : 64,       # larger batch — no SciBERT on GPU = more VRAM
+    "gradient_accumulation": 2,        # effective batch = 64
+    "new_lr"               : 3e-4,     # cross-attn, text_proj, null_token, norm_cross
+    "pretrained_lr"        : 5e-6,     # self-attn, FFN, embeddings, norms
+    "weight_decay"         : 0.0,      # TGM-DLM uses 0.0
+    "max_grad_norm"        : 1.7,
+    "num_epochs"           : 300,      # ~315 steps/epoch × 200 = ~63K steps
+    "warmup_steps"         : 5000,
 
     # Data
-    "num_workers" : 0,
-    "seed"        : 42,
+    "num_workers"      : 2,
+    "seed"             : 42,
+    "use_precomputed"  : True,    # use pre-computed SciBERT embeddings
 
     # Logging & checkpoints
-    "log_every"  : 100,
-    "val_every"  : 1000,
-    "save_every" : 2500,
+    "log_every"  : 50,
+    "val_every"  : 2000,
+    "save_every" : 10000,
 
     # Generation
-    "gen_steps"       : 32,
+    "gen_steps"       : 50,
     "gen_temperature" : 1.0,
     "gen_num_mols"    : 4,
     "cfg_scale"       : 3.0,
@@ -99,10 +94,10 @@ CONFIG = {
 
 
 # =============================================================================
-# LOSS FUNCTION
+# LOSS FUNCTION — NO TIMESTEP WEIGHTING
 # =============================================================================
 
-def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
+def diffusion_loss(logits, labels, pad_token_id=0):
     B, seq_len, vocab_size = logits.shape
     device = logits.device
 
@@ -117,11 +112,8 @@ def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
         reduction='none'
     )
 
-    #weights = (1.0 - timesteps)
-    #weights = weights.unsqueeze(1).expand(-1, seq_len, -1).reshape(-1)
-
     valid = (labels.view(-1) != -100).float()
-    loss = (raw_loss * valid).sum() / (valid).sum().clamp(min=1e-8)
+    loss = (raw_loss * valid).sum() / valid.sum().clamp(min=1e-8)
     return loss
 
 
@@ -129,7 +121,7 @@ def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
 # VALIDATION
 # =============================================================================
 
-def run_validation(model, val_loader, device, max_batches=100):
+def run_validation(model, val_loader, device, use_precomputed, max_batches=100):
     model.eval()
     total_loss  = 0.0
     total_steps = 0
@@ -141,14 +133,20 @@ def run_validation(model, val_loader, device, max_batches=100):
 
             input_ids = batch["input_ids"].to(device)
             labels    = batch["labels"].to(device)
-            timesteps = batch["timesteps"].to(device)
-            text_ids  = batch["text_input_ids"].to(device)
-            text_mask = batch["text_attention_mask"].to(device)
-            text_pad  = batch["text_padding_mask"].to(device)
 
-            text_embeds = model.get_text_embeddings(text_ids, text_mask)
+            if use_precomputed:
+                scibert_states = batch["scibert_states"].to(device)
+                text_pad       = batch["text_padding_mask"].to(device)
+                text_embeds    = model.project_text_embeddings(scibert_states)
+            else:
+                text_ids  = batch["text_input_ids"].to(device)
+                text_mask = batch["text_attention_mask"].to(device)
+                text_pad  = batch["text_padding_mask"].to(device)
+                text_embeds = model.get_text_embeddings(text_ids, text_mask)
+
+            timesteps = batch["timesteps"].to(device)
             logits = model(input_ids, timesteps, text_embeds, text_pad)
-            loss   = diffusion_loss(logits, labels, timesteps)
+            loss   = diffusion_loss(logits, labels)
 
             total_loss  += loss.item()
             total_steps += 1
@@ -158,19 +156,22 @@ def run_validation(model, val_loader, device, max_batches=100):
 
 
 # =============================================================================
-# GENERATION WITH CFG
+# GENERATION WITH CFG (needs SciBERT for eval — loaded separately)
 # =============================================================================
 
 def generate_with_cfg(model, tokenizer, text_tokenizer, device,
-                      prompts, cfg_scale=3.0, num_steps=32, temperature=1.0):
-    """
-    CFG for cross-attention-as-self-attention pretraining:
-    - Conditioned: cross-attention attends to text embeddings
-    - Unconditioned: cross-attention attends to molecule states (pretraining mode)
-    """
+                      prompts, cfg_scale=3.0, num_steps=50, temperature=1.0):
     model.eval()
     max_length = CONFIG["max_length"]
     B = len(prompts)
+
+    # For generation, we need SciBERT — load temporarily if not on model
+    if model.text_encoder is None:
+        from transformers import AutoModel
+        text_encoder = AutoModel.from_pretrained(CONFIG["text_model"]).to(device)
+        text_encoder.eval()
+    else:
+        text_encoder = model.text_encoder
 
     text_enc = text_tokenizer(
         prompts, padding=True, truncation=True,
@@ -178,10 +179,19 @@ def generate_with_cfg(model, tokenizer, text_tokenizer, device,
     ).to(device)
 
     with torch.no_grad():
-        text_embeds = model.get_text_embeddings(
-            text_enc["input_ids"], text_enc["attention_mask"]
+        outputs = text_encoder(
+            input_ids=text_enc["input_ids"],
+            attention_mask=text_enc["attention_mask"],
         )
+        scibert_states = outputs.last_hidden_state
+        text_embeds = model.project_text_embeddings(scibert_states)
+
     text_pad = (text_enc["attention_mask"] == 0)
+
+    # Clean up temporary encoder
+    if model.text_encoder is None:
+        del text_encoder
+        torch.cuda.empty_cache()
 
     input_ids = torch.full(
         (B, max_length), tokenizer.mask_token_id,
@@ -194,13 +204,9 @@ def generate_with_cfg(model, tokenizer, text_tokenizer, device,
         for step_idx, t_val in enumerate(t_vals):
             step_t = t_val.repeat(B).unsqueeze(-1)
 
-            # Conditioned: cross-attention attends to text
-            logits_cond = model(input_ids, step_t, text_embeds, text_pad)
-
-            # Unconditioned: cross-attention attends to molecule (text_embeds=None)
+            logits_cond   = model(input_ids, step_t, text_embeds, text_pad)
             logits_uncond = model(input_ids, step_t, None, None)
 
-            # CFG interpolation
             logits = logits_uncond + cfg_scale * (logits_cond - logits_uncond)
 
             if step_idx < num_steps - 1:
@@ -310,70 +316,12 @@ def load_pretrained(model, checkpoint_path, device):
     if unexpected:
         print(f"  WARNING — unexpected keys: {unexpected[:5]}...")
 
-    # All cross-attention weights should LOAD (they were pretrained)
     cross_loaded = [k for k in pretrained_state if "cross_attention" in k and k not in unexpected]
     text_missing = [k for k in missing if "text_" in k or "null_token" in k]
     print(f"  Cross-attention keys loaded: {len(cross_loaded)} (pretrained as 2nd self-attn)")
     print(f"  Text encoder/proj keys (new): {len(text_missing)}")
 
     return checkpoint.get("config", {})
-
-
-# =============================================================================
-# FREEZE STRATEGY
-# =============================================================================
-
-def setup_freeze(model):
-    """
-    Freeze everything except:
-      - cross_attention.k_proj  (adapt molecule→text input)
-      - cross_attention.v_proj  (adapt molecule→text input)
-      - text_proj               (learn SciBERT→model alignment)
-      - null_token              (for CFG)
-      - norm_cross              (adapt to new cross-attn distribution)
-
-    Everything else transfers directly from pretraining:
-      - self-attention (Q,K,V,out_proj) — unchanged
-      - cross_attention.q_proj — already knows how to query from molecule states
-      - cross_attention.out_proj — already knows how to project back
-      - FFN — unchanged
-      - embeddings, norms — unchanged
-      - SciBERT — frozen always
-    """
-    trainable_keywords = [
-        "cross_attention",
-        "text_proj",
-        "null_token",
-        "norm_cross",
-    ]
-
-    trainable_count = 0
-    frozen_count = 0
-
-    for name, param in model.named_parameters():
-        should_train = any(kw in name for kw in trainable_keywords)
-
-        if should_train:
-            param.requires_grad = True
-            trainable_count += 1
-        else:
-            param.requires_grad = False
-            frozen_count += 1
-
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    total_params = sum(p.numel() for p in model.parameters())
-
-    print(f"\n  Freeze strategy:")
-    print(f"    Trainable param groups: {trainable_count}")
-    print(f"    Frozen param groups:    {frozen_count}")
-    print(f"    Trainable params:       {trainable_params:,}")
-    print(f"    Total params:           {total_params:,}")
-    print(f"    Training ratio:         {trainable_params/total_params:.1%}")
-
-    print(f"\n  Trainable parameters:")
-    for name, param in model.named_parameters():
-        if param.requires_grad:
-            print(f"    {name:60s}  {param.numel():>10,}")
 
 
 # =============================================================================
@@ -415,12 +363,40 @@ def train(args):
     val_df   = pd.read_csv(val_path)
     print(f"  Train: {len(train_df):,}  |  Val: {len(val_df):,}")
 
-    train_dataset = TextConditionedDataset(train_df, mol_tokenizer)
-    val_dataset   = TextConditionedDataset(val_df, mol_tokenizer)
+    # --- Load pre-computed SciBERT embeddings ---
+    use_precomputed = CONFIG["use_precomputed"]
+    train_scibert = None
+    val_scibert   = None
+
+    if use_precomputed:
+        train_scibert_path = data_dir / "chebi20_train_scibert.pt"
+        val_scibert_path   = data_dir / "chebi20_val_scibert.pt"
+
+        if not train_scibert_path.exists():
+            print(f"ERROR: {train_scibert_path} not found.")
+            print("Run: python scripts/precompute_scibert.py")
+            sys.exit(1)
+
+        print("Loading pre-computed SciBERT embeddings...")
+        train_scibert = torch.load(train_scibert_path, weights_only=False)
+        val_scibert   = torch.load(val_scibert_path, weights_only=False)
+        print(f"  Train: {len(train_scibert):,} embeddings")
+        print(f"  Val:   {len(val_scibert):,} embeddings")
+        print("  SciBERT will NOT be loaded on GPU ✅")
+
+    # --- Datasets ---
+    train_dataset = TextConditionedDataset(
+        train_df, mol_tokenizer, scibert_states=train_scibert
+    )
+    val_dataset = TextConditionedDataset(
+        val_df, mol_tokenizer, scibert_states=val_scibert
+    )
 
     collator = TextDiffusionCollator(
-        mol_tokenizer, text_tokenizer,
-        max_text_len=CONFIG["max_text_len"]
+        mol_tokenizer,
+        text_tokenizer=text_tokenizer if not use_precomputed else None,
+        max_text_len=CONFIG["max_text_len"],
+        use_precomputed=use_precomputed,
     )
 
     train_loader = DataLoader(
@@ -434,8 +410,8 @@ def train(args):
         num_workers=CONFIG["num_workers"], pin_memory=True,
     )
 
-    # --- Build model WITH SciBERT ---
-    print(f"\nBuilding model with SciBERT ({CONFIG['text_model']})...")
+    # --- Build model (NO SciBERT on GPU during training) ---
+    print(f"\nBuilding model...")
     model = MolecularDiffusionModel(
         vocab_size      = CONFIG["vocab_size"],
         hidden_size     = CONFIG["hidden_size"],
@@ -447,35 +423,33 @@ def train(args):
         text_model_name = CONFIG["text_model"],
         uncond_prob     = CONFIG["uncond_prob"],
         dropout         = CONFIG["dropout"],
+        load_text_encoder = not use_precomputed,  # skip SciBERT if pre-computed
     ).to(device)
 
-    # --- Load pretrained weights (including cross-attention!) ---
+    # --- Load pretrained weights ---
     load_pretrained(model, args.checkpoint, device)
 
-    # --- Freeze strategy: only K/V + text_proj + null_token train ---
-    #setup_freeze(model)
-
-    # --- Optimizer (only trainable params) ---
+    # --- Differential LR optimizer ---
     acc_steps = CONFIG["gradient_accumulation"]
     steps_per_epoch = len(train_loader) // acc_steps
     total_steps = steps_per_epoch * CONFIG["num_epochs"]
-    warmup_steps = int(total_steps * CONFIG["warmup_ratio"])
+    warmup_steps = CONFIG["warmup_steps"]
 
     new_module_keywords = ["cross_attention", "text_proj", "null_token", "norm_cross"]
-    
+
     new_params = []
     pretrained_params = []
-    
+
     for name, param in model.named_parameters():
         if not param.requires_grad:
-            continue  # skip frozen SciBERT
+            continue
         if any(kw in name for kw in new_module_keywords):
             new_params.append(param)
         else:
             pretrained_params.append(param)
-    
-    print(f"New module params:      {sum(p.numel() for p in new_params):,}")
-    print(f"Pretrained params:      {sum(p.numel() for p in pretrained_params):,}")
+
+    print(f"\n  New module params:    {sum(p.numel() for p in new_params):,}")
+    print(f"  Pretrained params:    {sum(p.numel() for p in pretrained_params):,}")
 
     optimizer = AdamW([
         {"params": new_params,       "lr": CONFIG["new_lr"]},
@@ -488,9 +462,10 @@ def train(args):
         num_training_steps=total_steps,
     )
 
-    print(f"\nSteps per epoch: {steps_per_epoch:,}")
-    print(f"Total steps:     {total_steps:,}")
-    print(f"Warmup steps:    {warmup_steps:,}")
+    print(f"\n  Steps per epoch: {steps_per_epoch:,}")
+    print(f"  Total steps:     {total_steps:,}")
+    print(f"  Warmup steps:    {warmup_steps:,}")
+    print(f"  Batch size:      {CONFIG['batch_size']} × {acc_steps} = {CONFIG['batch_size'] * acc_steps}")
 
     # --- W&B ---
     wandb.init(project=CONFIG["wandb_project"], config=CONFIG)
@@ -507,14 +482,21 @@ def train(args):
             input_ids = batch["input_ids"].to(device)
             labels    = batch["labels"].to(device)
             timesteps = batch["timesteps"].to(device)
-            text_ids  = batch["text_input_ids"].to(device)
-            text_mask = batch["text_attention_mask"].to(device)
-            text_pad  = batch["text_padding_mask"].to(device)
 
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-                text_embeds = model.get_text_embeddings(text_ids, text_mask)
+                # Get text embeddings
+                if use_precomputed:
+                    scibert_states = batch["scibert_states"].to(device)
+                    text_pad       = batch["text_padding_mask"].to(device)
+                    text_embeds    = model.project_text_embeddings(scibert_states)
+                else:
+                    text_ids  = batch["text_input_ids"].to(device)
+                    text_mask = batch["text_attention_mask"].to(device)
+                    text_pad  = batch["text_padding_mask"].to(device)
+                    text_embeds = model.get_text_embeddings(text_ids, text_mask)
+
                 logits = model(input_ids, timesteps, text_embeds, text_pad)
-                loss = diffusion_loss(logits, labels, timesteps)
+                loss = diffusion_loss(logits, labels)
                 loss = loss / acc_steps
 
             loss.backward()
@@ -531,22 +513,27 @@ def train(args):
 
                 # --- Logging ---
                 if global_step % CONFIG["log_every"] == 0:
-                    lr = scheduler.get_last_lr()[0]
+                    lr_new = optimizer.param_groups[0]["lr"]
+                    lr_pre = optimizer.param_groups[1]["lr"]
                     actual_loss = loss.item() * acc_steps
                     print(f"Step {global_step:>6} | "
                           f"loss: {actual_loss:.4f} | "
                           f"grad: {grad_norm:.4f} | "
-                          f"lr: {lr:.2e}")
+                          f"lr_new: {lr_new:.2e} | "
+                          f"lr_pre: {lr_pre:.2e}")
                     wandb.log({
                         "train/loss"     : actual_loss,
                         "train/grad_norm": float(grad_norm),
-                        "train/lr"       : lr,
+                        "train/lr_new"   : lr_new,
+                        "train/lr_pre"   : lr_pre,
                         "train/epoch"    : epoch + (step_idx / len(train_loader)),
                     }, step=global_step)
 
                 # --- Validation + generation ---
                 if global_step % CONFIG["val_every"] == 0:
-                    val_loss = run_validation(model, val_loader, device)
+                    val_loss = run_validation(
+                        model, val_loader, device, use_precomputed
+                    )
                     print(f"  → Val loss: {val_loss:.4f}")
                     wandb.log({"val/loss": val_loss}, step=global_step)
 

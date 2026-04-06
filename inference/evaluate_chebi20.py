@@ -275,7 +275,8 @@ def load_finetuned_model(checkpoint_path, mol_tokenizer, device):
         dropout         = 0.0,
     ).to(device)
 
-    model.load_state_dict(checkpoint["model"])
+    missing, unexpected = model.load_state_dict(checkpoint["model"], strict=False)
+    print(f"  Missing keys ignored (expected SciBERT): {len(missing)}")
     model.eval()
 
     step = checkpoint.get("step", "?")
