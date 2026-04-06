@@ -56,7 +56,7 @@ CONFIG = {
     "hidden_size" : 768,
     "num_heads"   : 12,
     "ffn_dim"     : 3072,
-    "num_layers"  : 12,
+    "num_layers"  : 16,
     "max_length"  : 74,
     "dropout"     : 0.1,
 
@@ -66,12 +66,13 @@ CONFIG = {
     "uncond_prob"   : 0.1,
 
     # Fine-tuning
-    "batch_size"           : 64,
-    "gradient_accumulation": 4,
-    "learning_rate"        : 3e-5,     # can be aggressive (3e-4) — only K/V + projector train
+    "batch_size"           : 32,
+    "gradient_accumulation": 2,
+    "new_lr": 3e-4, # cross-attn, text_proj, null_token, norm_cross
+    "pretrained_lr": 1e-4, # everything else (pretrained) — very gentle to preserve knowledge
     "weight_decay"         : 0.01,
-    "max_grad_norm"        : 1.0,
-    "num_epochs"           : 15,
+    "max_grad_norm"        : 1.33,
+    "num_epochs"           : 66,
     "warmup_ratio"         : 0.1,
 
     # Data
@@ -79,9 +80,9 @@ CONFIG = {
     "seed"        : 42,
 
     # Logging & checkpoints
-    "log_every"  : 50,
-    "val_every"  : 250,
-    "save_every" : 500,
+    "log_every"  : 100,
+    "val_every"  : 1000,
+    "save_every" : 2500,
 
     # Generation
     "gen_steps"       : 32,
@@ -116,11 +117,11 @@ def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
         reduction='none'
     )
 
-    weights = (1.0 - timesteps)
-    weights = weights.unsqueeze(1).expand(-1, seq_len, -1).reshape(-1)
+    #weights = (1.0 - timesteps)
+    #weights = weights.unsqueeze(1).expand(-1, seq_len, -1).reshape(-1)
 
     valid = (labels.view(-1) != -100).float()
-    loss = (raw_loss * weights * valid).sum() / (weights * valid).sum().clamp(min=1e-8)
+    loss = (raw_loss * valid).sum() / (valid).sum().clamp(min=1e-8)
     return loss
 
 
@@ -340,8 +341,7 @@ def setup_freeze(model):
       - SciBERT — frozen always
     """
     trainable_keywords = [
-        "cross_attention.k_proj",
-        "cross_attention.v_proj",
+        "cross_attention",
         "text_proj",
         "null_token",
         "norm_cross",
@@ -453,7 +453,7 @@ def train(args):
     load_pretrained(model, args.checkpoint, device)
 
     # --- Freeze strategy: only K/V + text_proj + null_token train ---
-    setup_freeze(model)
+    #setup_freeze(model)
 
     # --- Optimizer (only trainable params) ---
     acc_steps = CONFIG["gradient_accumulation"]
@@ -461,11 +461,26 @@ def train(args):
     total_steps = steps_per_epoch * CONFIG["num_epochs"]
     warmup_steps = int(total_steps * CONFIG["warmup_ratio"])
 
-    optimizer = AdamW(
-        [p for p in model.parameters() if p.requires_grad],
-        lr=CONFIG["learning_rate"],
-        weight_decay=CONFIG["weight_decay"],
-    )
+    new_module_keywords = ["cross_attention", "text_proj", "null_token", "norm_cross"]
+    
+    new_params = []
+    pretrained_params = []
+    
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue  # skip frozen SciBERT
+        if any(kw in name for kw in new_module_keywords):
+            new_params.append(param)
+        else:
+            pretrained_params.append(param)
+    
+    print(f"New module params:      {sum(p.numel() for p in new_params):,}")
+    print(f"Pretrained params:      {sum(p.numel() for p in pretrained_params):,}")
+
+    optimizer = AdamW([
+        {"params": new_params,       "lr": CONFIG["new_lr"]},
+        {"params": pretrained_params, "lr": CONFIG["pretrained_lr"]},
+    ], weight_decay=CONFIG["weight_decay"])
 
     scheduler = get_cosine_schedule_with_warmup(
         optimizer,
@@ -584,14 +599,17 @@ if __name__ == "__main__":
         default=CONFIG["pretrained_checkpoint"],
         help="Path to pretrained checkpoint (with cross-attention)"
     )
-    parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--new_lr", type=float, default=None)
+    parser.add_argument("--pretrained_lr", type=float, default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch_size", type=int, default=None)
 
     args = parser.parse_args()
 
-    if args.lr is not None:
-        CONFIG["learning_rate"] = args.lr
+    if args.new_lr is not None:
+        CONFIG["new_lr"] = args.new_lr
+    if args.pretrained_lr is not None:
+        CONFIG["pretrained_lr"] = args.pretrained_lr
     if args.epochs is not None:
         CONFIG["num_epochs"] = args.epochs
     if args.batch_size is not None:

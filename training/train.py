@@ -28,7 +28,7 @@ CONFIG = {
     "hidden_size" : 768,
     "num_heads"   : 12,
     "ffn_dim"     : 3072,
-    "num_layers"  : 12,
+    "num_layers"  : 16,
     "max_length"  : 74,
     "dropout"     : 0.1,
 
@@ -41,8 +41,8 @@ CONFIG = {
     "learning_rate"        : 3e-4,
     "weight_decay"         : 0.01,
     "max_grad_norm"        : 1.0,
-    "num_epochs"           : 30,
-    "warmup_steps"         : 5000,
+    "num_epochs"           : 55,
+    "warmup_steps"         : 7700,
 
     # Data
     "val_fraction" : 0.05,
