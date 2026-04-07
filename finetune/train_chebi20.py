@@ -143,15 +143,29 @@ def _apply_run_config(model_size: str, encoder: str):
     CONFIG["eval_summary"]    = str(PROJECT_ROOT / "outputs" / f"{stem}_eval_summary.txt")
 
 
-def _load_contrastive_text_encoder(device):
-    """Load the fine-tuned text encoder from checkpoints/contrastive_text_selfies.pt."""
-    ckpt_path = PROJECT_ROOT / "checkpoints" / "contrastive_text_selfies.pt"
+def _load_contrastive_text_encoder(ckpt_path, device):
+    """Load the fine-tuned text encoder from a contrastive aligner checkpoint.
+
+    Args:
+        ckpt_path: Path to the contrastive checkpoint (e.g.
+                   checkpoints/contrastive_bge_molinst.pt or
+                   checkpoints/contrastive_scibert_chembl.pt).
+        device:    torch device to move the encoder to.
+    """
+    ckpt_path = Path(ckpt_path)
     if not ckpt_path.exists():
         raise FileNotFoundError(
             f"Contrastive checkpoint not found: {ckpt_path}\n"
-            "Train the contrastive aligner first (contrastive/ notebook)."
+            "Pass a valid path via --contrastive_ckpt."
         )
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    cfg  = ckpt.get("config", {})
+    text_model_name = cfg.get("text_model")
+    if text_model_name is None:
+        raise ValueError(
+            f"Contrastive checkpoint {ckpt_path.name} has no 'config.text_model' field. "
+            "Cannot determine which HuggingFace model to load."
+        )
     text_state = {
         k[len("text_model."):]: v
         for k, v in ckpt["model_state"].items()
@@ -159,11 +173,13 @@ def _load_contrastive_text_encoder(device):
     }
     assert text_state, "No 'text_model.*' keys found in contrastive checkpoint."
     from transformers import AutoModel
-    encoder = AutoModel.from_pretrained(CONFIG["text_model"])
+    encoder = AutoModel.from_pretrained(text_model_name)
     encoder.load_state_dict(text_state, strict=True)
-    print(f"[encoder] contrastive (from {ckpt_path.name}  "
-          f"epoch={ckpt.get('epoch','?')}  "
-          f"best_val_loss={ckpt.get('best_val_loss', float('nan')):.4f})")
+    print(f"[encoder] contrastive  checkpoint={ckpt_path.name}  "
+          f"text_model={text_model_name}  "
+          f"hidden_dim={encoder.config.hidden_size}  "
+          f"epoch={ckpt.get('best_epoch', ckpt.get('epoch', '?'))}  "
+          f"best_val_loss={ckpt.get('best_val_loss', float('nan')):.4f}")
     return encoder.to(device)
 
 
@@ -523,6 +539,17 @@ def _sentence_bleu(ref_tokens, hyp_tokens, max_n=4):
     return bp * math.exp(log_avg)
 
 
+import re as _re
+_ATOM_PATTERN = _re.compile(
+    r'(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p'
+    r'|\(|\)|\.|=|#|-|\+|\\|\/|:|~|@|\?|>|\*|\$|\%[0-9]{2}|[0-9])'
+)
+
+def _atom_tokenize(smiles: str) -> list:
+    """Tokenize SMILES at atom/bond level (TGM-DLM convention)."""
+    return _ATOM_PATTERN.findall(smiles)
+
+
 def _lev_sim(a: str, b: str) -> float:
     """Levenshtein similarity = 1 - normalised edit distance (on chars)."""
     m, n = len(a), len(b)
@@ -632,11 +659,17 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
         except Exception:
             pass
 
-        # BLEU-2 and BLEU-4 on SMILES characters (TGM-DLM convention)
+        # Character-level BLEU-2 and BLEU-4
         ref_chars = list(gt_smiles)
         hyp_chars = list(gen_smiles)
         bleu2 = _sentence_bleu(ref_chars, hyp_chars, max_n=2)
         bleu4 = _sentence_bleu(ref_chars, hyp_chars, max_n=4)
+
+        # Atom-level BLEU (TGM-DLM convention — directly comparable)
+        ref_atoms = _atom_tokenize(gt_smiles)
+        hyp_atoms = _atom_tokenize(gen_smiles)
+        atom_bleu2 = _sentence_bleu(ref_atoms, hyp_atoms, max_n=2)
+        atom_bleu4 = _sentence_bleu(ref_atoms, hyp_atoms, max_n=4)
 
         # Levenshtein similarity on canonical SMILES characters
         lev_sim = _lev_sim(gt_smiles, gen_smiles) if gt_smiles and gen_smiles else 0.0
@@ -655,8 +688,10 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
             "gen_smiles"  : gen_smiles,
             "valid"       : valid,
             "exact_match" : exact,
-            "bleu2"       : round(bleu2,  4),
-            "bleu4"       : round(bleu4,  4),
+            "bleu2"       : round(bleu2,      4),
+            "bleu4"       : round(bleu4,      4),
+            "atom_bleu2"  : round(atom_bleu2, 4),
+            "atom_bleu4"  : round(atom_bleu4, 4),
             "lev_sim"     : round(lev_sim, 4),
             "morgan_sim"  : round(tan_morgan, 4),
             "maccs_sim"   : round(tan_maccs,  4),
@@ -682,8 +717,10 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
 
     validity_pct  = 100.0 * n_valid / n
     exact_pct     = 100.0 * df_out["exact_match"].mean()
-    bleu2_avg     = df_out["bleu2"].mean()
-    bleu4_avg     = df_out["bleu4"].mean()
+    bleu2_avg      = df_out["bleu2"].mean()
+    bleu4_avg      = df_out["bleu4"].mean()
+    atom_bleu2_avg = df_out["atom_bleu2"].mean()
+    atom_bleu4_avg = df_out["atom_bleu4"].mean()
     lev_avg       = df_out["lev_sim"].mean()
     # Fingerprint metrics on valid-only rows (same convention as TGM-DLM)
     morgan_avg = valid_rows["morgan_sim"].mean() if n_valid else float("nan")
@@ -703,8 +740,10 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
         "=" * 65,
         f"  Validity (%)                  {validity_pct:>8.1f}%",
         f"  Exact Match (%)               {exact_pct:>8.1f}%",
-        f"  BLEU-2                        {bleu2_avg:>8.4f}",
-        f"  BLEU-4                        {bleu4_avg:>8.4f}",
+        f"  BLEU-2 (char)                 {bleu2_avg:>8.4f}",
+        f"  BLEU-4 (char)                 {bleu4_avg:>8.4f}",
+        f"  BLEU-2 (atom)                 {atom_bleu2_avg:>8.4f}",
+        f"  BLEU-4 (atom)                 {atom_bleu4_avg:>8.4f}",
         f"  Levenshtein Similarity        {lev_avg:>8.4f}",
         f"  Morgan FP Tanimoto (valid)    {morgan_avg:>8.4f}",
         f"  MACCS FP Tanimoto  (valid)    {maccs_avg:>8.4f}",
@@ -712,8 +751,9 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
         "=" * 65,
         "",
         "Reference: TGM-DLM (AAAI 2024) on ChEBI-20",
-        "  Validity: ~100%  BLEU-2: 0.564  BLEU-4: 0.470",
-        "  Levenshtein: 0.758  Morgan: 0.609  MACCS: 0.784  RDK: 0.677",
+        "  Validity: 87.1% (w/ correction)  BLEU-2: 0.826  BLEU-4: ~0.77 (atom-level, comparable)",
+        "  Levenshtein: 17.003 (raw, not normalized)  Morgan: 0.688  MACCS: 0.854  RDK: 0.739",
+        "  ! TGM-DLM: 180M params, SciBERT encoder, ~100K+ steps, A100 GPU.",
         "=" * 65,
     ]
 
@@ -802,7 +842,17 @@ def train():
     train_csv, val_csv, test_csv = prepare_chebi20(tokenizer_path, data_dir)
 
     tokenizer    = ChemicalTokenizer(tokenizer_path)
-    hf_tokenizer = AutoTokenizer.from_pretrained(CONFIG["text_model"])
+    # Use the tokenizer that matches the actual text encoder.
+    # For contrastive encoders, read text_model from the checkpoint config so
+    # SciBERT checkpoints use SciBERT's tokenizer rather than BGE's.
+    if CONFIG.get("encoder") == "contrastive" and args.contrastive_ckpt:
+        _enc_cfg = torch.load(args.contrastive_ckpt, map_location="cpu",
+                              weights_only=False).get("config", {})
+        _hf_model_name = _enc_cfg.get("text_model", CONFIG["text_model"])
+    else:
+        _hf_model_name = CONFIG["text_model"]
+    hf_tokenizer = AutoTokenizer.from_pretrained(_hf_model_name)
+    print(f"[tokenizer] text tokenizer: {_hf_model_name}")
 
     train_df = pd.read_csv(train_csv)
     val_df   = pd.read_csv(val_csv)
@@ -849,7 +899,9 @@ def train():
 
     # Swap in contrastive text encoder if requested
     if CONFIG.get("encoder") == "contrastive":
-        model.text_encoder = _load_contrastive_text_encoder(device)
+        encoder = _load_contrastive_text_encoder(args.contrastive_ckpt, device)
+        model.set_text_encoder(encoder)
+        CONFIG["text_model"] = encoder.config._name_or_path
 
     # Freeze / unfreeze text encoder
     frozen = CONFIG["freeze_text_encoder"]
@@ -1035,14 +1087,29 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=None,
                         help="Number of denoising steps (default: CONFIG eval_steps=50)")
     parser.add_argument("--encoder", choices=["frozen", "contrastive"], default="frozen",
-                        help="Text encoder to use: 'frozen' (BGE default) or "
-                             "'contrastive' (loads checkpoints/contrastive_text_selfies.pt)")
+                        help="Text encoder to use: 'frozen' (default, BGE-large frozen) or "
+                             "'contrastive' (fine-tuned encoder; requires --contrastive_ckpt)")
+    parser.add_argument("--contrastive_ckpt", type=str, default=None,
+                        help="Path to contrastive aligner checkpoint, e.g. "
+                             "checkpoints/contrastive_bge_molinst.pt or "
+                             "checkpoints/contrastive_scibert_chembl.pt  "
+                             "(required when --encoder contrastive)")
     parser.add_argument("--model_size", type=str, default="27M",
                         help="Model size tag used in checkpoint/output filenames (default: 27M)")
+    parser.add_argument("--num_epochs", type=int, default=None,
+                        help="Override CONFIG num_epochs (default: 10)")
     args = parser.parse_args()
+
+    if args.encoder == "contrastive" and args.contrastive_ckpt is None:
+        parser.error(
+            "--contrastive_ckpt is required when --encoder contrastive is set.\n"
+            "Example: --contrastive_ckpt checkpoints/contrastive_bge_molinst.pt"
+        )
 
     # Apply run identity to CONFIG paths before anything else
     _apply_run_config(args.model_size, args.encoder)
+    if args.num_epochs is not None:
+        CONFIG["num_epochs"] = args.num_epochs
 
     if args.eval_only:
         # ── Eval-only mode ────────────────────────────────────────────────────
@@ -1062,7 +1129,14 @@ if __name__ == "__main__":
 
         tokenizer_path = PROJECT_ROOT / "chemical_tokenizer.json"
         tokenizer      = ChemicalTokenizer(tokenizer_path)
-        hf_tokenizer   = AutoTokenizer.from_pretrained(CONFIG["text_model"])
+        if args.encoder == "contrastive" and args.contrastive_ckpt:
+            _enc_cfg = torch.load(args.contrastive_ckpt, map_location="cpu",
+                                  weights_only=False).get("config", {})
+            _hf_model_name = _enc_cfg.get("text_model", CONFIG["text_model"])
+        else:
+            _hf_model_name = CONFIG["text_model"]
+        hf_tokenizer   = AutoTokenizer.from_pretrained(_hf_model_name)
+        print(f"[tokenizer] text tokenizer: {_hf_model_name}")
 
         # Ensure ChEBI-20 data is present (downloads if needed)
         data_dir = Path(CONFIG["data_dir"])
@@ -1082,8 +1156,11 @@ if __name__ == "__main__":
         ).to(device)
 
         # Swap in contrastive text encoder if requested (before loading checkpoint)
+        # set_text_encoder must come before load_state_dict so encoder_proj keys
+        # are registered on the model before strict loading.
         if args.encoder == "contrastive":
-            model.text_encoder = _load_contrastive_text_encoder(device)
+            encoder = _load_contrastive_text_encoder(args.contrastive_ckpt, device)
+            model.set_text_encoder(encoder)
 
         best_ckpt = Path(CONFIG["save_ckpt"])
         if not best_ckpt.exists():

@@ -69,7 +69,7 @@ CONFIG = {
     "log_path"      : str(Path(__file__).parent.parent / "outputs" / "finetune_log.csv"),
     "plot_dir"      : str(Path(__file__).parent.parent / "outputs" / "plots" / "finetune"),
     "wandb_project" : "morpheus-diffusion-finetune",
-    "contrastive_ckpt_path" : None,   # local path to contrastive_text_selfies.pt
+    "contrastive_ckpt_path" : None,   # e.g. checkpoints/contrastive_bge_molinst.pt or contrastive_scibert_chembl.pt
     "contrastive_artifact"  : None,   # W&B artifact
 
     "freeze_text_encoder"   : True,

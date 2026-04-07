@@ -1,0 +1,22 @@
+=================================================================
+  ChEBI-20 EVALUATION — Morpheus 27M_scibert [contrastive]
+  Checkpoint : chebi20_27M_scibert_contrastive.pt
+  Test set   : 2542 molecules
+  CFG scale  : 3.0  Temperature: 1.0  Steps: 50
+=================================================================
+  Validity (%)                     100.0%
+  Exact Match (%)                    0.0%
+  BLEU-2                          0.4594
+  BLEU-4                          0.3341
+  Levenshtein Similarity          0.4005
+  Morgan FP Tanimoto (valid)      0.1772
+  MACCS FP Tanimoto  (valid)      0.4858
+  RDK FP Tanimoto    (valid)      0.2564
+=================================================================
+
+Reference: TGM-DLM (AAAI 2024) on ChEBI-20
+  Validity: 87.1% (w/ correction)  BLEU: 0.826 (atom-token level)
+  Levenshtein: 17.003 (raw, not normalized)  Morgan: 0.688  MACCS: 0.854  RDK: 0.739
+  ! TGM-DLM uses atom-level SMILES tokenization for BLEU; we use character-level. NOT comparable.
+  ! TGM-DLM: 180M params, SciBERT encoder, ~100K+ steps, A100 GPU.
+=================================================================

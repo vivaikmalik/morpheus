@@ -37,16 +37,23 @@ class MolecularDiffusionModel(nn.Module):
         # Freeze the text encoder
         for param in self.text_encoder.parameters():
             param.requires_grad = False
-            
+
         text_hidden_size = self.text_encoder.config.hidden_size
-        
-        # MLP Projector 
+
+        # MLP Projector: maps text encoder output → model hidden_size.
+        # Assumes text_hidden_size == 1024 (BGE-large default).
         self.text_proj = nn.Sequential(
             nn.Linear(text_hidden_size, ffn_dim),
             nn.SiLU(),
             nn.Linear(ffn_dim, hidden_size)
         )
-        
+
+        # Optional narrow-encoder projection (set via set_text_encoder).
+        # None when encoder hidden_dim matches text_proj input dim (BGE: 1024).
+        # Registered as nn.Linear when a narrower encoder is used (e.g. SciBERT: 768),
+        # so it is included in state_dict and trained during fine-tuning.
+        self.encoder_proj: nn.Linear | None = None
+
         # Learnable null token for CFG
         self.null_token = nn.Parameter(torch.randn(1, 1, hidden_size))
 
@@ -90,15 +97,48 @@ class MolecularDiffusionModel(nn.Module):
             nn.init.zeros_(block.cross_attention.out_proj.weight)
             nn.init.zeros_(block.cross_attention.out_proj.bias)
 
+    def set_text_encoder(self, encoder: nn.Module) -> None:
+        """Replace the text encoder and wire up encoder_proj if hidden dims differ.
+
+        Must be called BEFORE load_state_dict when loading a fine-tune checkpoint
+        that was saved with a non-default encoder, so that encoder_proj keys are
+        present in the model before strict loading.
+
+        When encoder.config.hidden_size == text_proj input dim (1024 for BGE),
+        encoder_proj is set to None and the forward path is identical to default.
+        """
+        self.text_encoder = encoder
+        enc_dim      = encoder.config.hidden_size
+        proj_in_dim  = self.text_proj[0].in_features   # first Linear of text_proj
+
+        if enc_dim != proj_in_dim:
+            proj = nn.Linear(enc_dim, proj_in_dim).to(next(encoder.parameters()).device)
+            nn.init.zeros_(proj.bias)
+            # Near-identity init for the rows that overlap; zero-pad the rest.
+            nn.init.zeros_(proj.weight)
+            with torch.no_grad():
+                overlap = min(enc_dim, proj_in_dim)
+                proj.weight[:overlap, :overlap] = torch.eye(overlap)
+            self.encoder_proj = proj
+            print(f"[model] encoder_proj created: {enc_dim} → {proj_in_dim}  (trainable)")
+        else:
+            self.encoder_proj = None
+            print(f"[model] encoder_proj not needed ({enc_dim}-dim matches text_proj input)")
+
     def get_text_embeddings(self, text_input_ids, text_attention_mask):
-        """ Runs the frozen text model and projects the embeddings """
+        """Run the text encoder and project embeddings to model hidden_size."""
         with torch.no_grad():
-            outputs = self.text_encoder(input_ids=text_input_ids, attention_mask=text_attention_mask)
-            # Get the sequence of hidden states from the last layer
-            hidden_states = outputs.last_hidden_state 
-            
-        # Pass through the learnable projector
-        return self.text_proj(hidden_states)
+            outputs = self.text_encoder(
+                input_ids=text_input_ids,
+                attention_mask=text_attention_mask,
+            )
+            hidden_states = outputs.last_hidden_state   # [B, L, enc_dim]
+
+        # encoder_proj is outside no_grad so gradients flow during fine-tuning.
+        if self.encoder_proj is not None:
+            hidden_states = self.encoder_proj(hidden_states)   # [B, L, proj_in_dim]
+
+        return self.text_proj(hidden_states)   # [B, L, hidden_size]
 
     def forward(self, input_ids, timesteps, text_embeds, text_padding_mask=None):
         device  = input_ids.device
