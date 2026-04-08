@@ -183,6 +183,92 @@ def _load_contrastive_text_encoder(ckpt_path, device):
     return encoder.to(device)
 
 
+def _load_contrastive_scorer(ckpt_path: str, device):
+    """
+    Reconstruct the full ContrastiveAligner from a contrastive checkpoint for
+    best-of-N reranking.  Returns (aligner, scorer_hf_tokenizer).
+
+    The molecule encoder in these checkpoints used a self-attention-only
+    transformer (no cross-attention), so we reconstruct with _SelfAttnOnlyBlock
+    rather than the current TransformerBlock which has cross-attention.
+    The aligner is frozen and set to eval mode.
+    """
+    from model.embeddings import TimestepEmbedding, PositionalEmbedding
+    from model.transformerBlock import SelfAttention, FeedForward
+    from contrastive.model import MoleculeEncoder, ContrastiveAligner
+    from transformers import AutoModel, AutoTokenizer
+
+    ckpt_path = Path(ckpt_path)
+    ckpt  = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    cfg   = ckpt["config"]
+    mc    = ckpt["molecular_config"]
+    state = ckpt["model_state"]
+
+    # Self-attention-only block matching the contrastive checkpoint's architecture.
+    # These checkpoints have: norm1, attention, norm2, ffn (no norm_cross/cross_attention).
+    class _SelfAttnOnlyBlock(nn.Module):
+        def __init__(self, hidden_size, num_heads, ffn_dim):
+            super().__init__()
+            self.norm1     = nn.LayerNorm(hidden_size)
+            self.attention = SelfAttention(hidden_size, num_heads, dropout=0.0)
+            self.norm2     = nn.LayerNorm(hidden_size)
+            self.ffn       = FeedForward(hidden_size, ffn_dim, dropout=0.0)
+
+        def forward(self, x, padding_mask=None):
+            x = x + self.attention(self.norm1(x), padding_mask)
+            x = x + self.ffn(self.norm2(x))
+            return x
+
+    class _MolBackbone(nn.Module):
+        def __init__(self):
+            super().__init__()
+            h, n, f = mc["hidden_size"], mc["num_heads"], mc["ffn_dim"]
+            v, ml   = mc["vocab_size"], mc["max_length"]
+            self.token_embedding    = nn.Embedding(v, h)
+            self.pos_embedding      = PositionalEmbedding(ml, h)
+            self.timestep_embedding = TimestepEmbedding(h)
+            self.input_norm         = nn.LayerNorm(h)
+            self.blocks             = nn.ModuleList([
+                _SelfAttnOnlyBlock(h, n, f) for _ in range(mc["num_layers"])
+            ])
+            self.output_norm = nn.LayerNorm(h)
+            self.lm_head     = nn.Linear(h, v, bias=False)
+
+    backbone    = _MolBackbone()
+    mol_encoder = MoleculeEncoder(backbone)
+
+    text_model_name  = cfg["text_model"]
+    text_model       = AutoModel.from_pretrained(text_model_name)
+    text_hidden      = text_model.config.hidden_size
+    mol_hidden       = mc["hidden_size"]
+    proj_dim         = cfg["proj_dim"]
+    # Infer project_molecule from actual weight presence (cfg flag is unreliable)
+    project_molecule = "mol_proj.weight" in state
+
+    aligner = ContrastiveAligner(
+        text_model=text_model,
+        molecule_encoder=mol_encoder,
+        text_hidden=text_hidden,
+        mol_hidden=mol_hidden,
+        proj_dim=proj_dim,
+        project_molecule=project_molecule,
+    )
+    missing, unexpected = aligner.load_state_dict(state, strict=False)
+    if unexpected:
+        print(f"[scorer] WARNING unexpected keys: {unexpected}")
+    if missing:
+        print(f"[scorer] WARNING missing keys: {missing}")
+
+    aligner.to(device).eval()
+    for p in aligner.parameters():
+        p.requires_grad_(False)
+
+    scorer_tokenizer = AutoTokenizer.from_pretrained(text_model_name)
+    print(f"[scorer] loaded  ckpt={ckpt_path.name}  text={text_model_name}  "
+          f"proj_dim={proj_dim}  mol_hidden={mol_hidden}")
+    return aligner, scorer_tokenizer
+
+
 # =============================================================================
 # DATA PREPARATION
 # =============================================================================
@@ -479,6 +565,49 @@ def _apply_eos_truncation(model, tokenizer, hf_tokenizer,
     return result
 
 
+@torch.no_grad()
+def _rerank_candidates(model, tokenizer, hf_tokenizer, scorer, scorer_tokenizer,
+                       prompts, device, cfg_scale, temperature, num_steps, rerank_n):
+    """
+    Generate rerank_n candidates per prompt and return the highest-scoring one
+    (by cosine similarity in the contrastive embedding space).
+    """
+    pad_id  = tokenizer.pad_token_id
+    max_len = CONFIG["max_length"]
+    n       = len(prompts)
+
+    # Generate rerank_n independent candidate sets.
+    # all_candidates[k][i] = token-ID list for candidate k of prompt i.
+    all_candidates = []
+    for _ in range(rerank_n):
+        all_candidates.append(
+            _generate_cfg_batch(model, tokenizer, hf_tokenizer, prompts, device,
+                                cfg_scale=cfg_scale, temperature=temperature,
+                                num_steps=num_steps)
+        )
+
+    # Encode all text prompts once with the scorer's own tokenizer.
+    text_inputs = scorer_tokenizer(
+        prompts, padding=True, truncation=True, max_length=128, return_tensors="pt"
+    ).to(device)
+    z_text = scorer.encode_text(text_inputs)   # [n, proj_dim], L2-normalised
+
+    best_ids = []
+    for i in range(n):
+        # Stack all N candidates for prompt i → [N, max_len] padded tensor.
+        mol_ids = torch.full((rerank_n, max_len), pad_id, dtype=torch.long, device=device)
+        for k, cand_ids in enumerate(all_candidates):
+            ids = cand_ids[i][:max_len]
+            mol_ids[k, :len(ids)] = torch.tensor(ids, dtype=torch.long, device=device)
+
+        z_mol  = scorer.encode_molecule(mol_ids, pad_id)   # [N, proj_dim], L2-normalised
+        sims   = (z_text[i:i+1] * z_mol).sum(dim=-1)      # [N] cosine similarities
+        best_k = int(sims.argmax())
+        best_ids.append(all_candidates[best_k][i])
+
+    return best_ids
+
+
 def generate_samples(model, tokenizer, hf_tokenizer, device, step):
     """Print a few CFG samples during training — ChEBI-20 style prompts."""
     model.eval()
@@ -586,7 +715,10 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
                       eos_truncate: bool = False,
                       cfg_scale: float = None,
                       temperature: float = None,
-                      num_steps: int = None):
+                      num_steps: int = None,
+                      rerank_n: int = 1,
+                      scorer=None,
+                      scorer_tokenizer=None):
     """
     Generate molecules for all ChEBI-20 test prompts and compute TGM-DLM metrics.
     Saves per-row CSV + summary text file.
@@ -614,16 +746,23 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
 
     model.eval()
 
-    # Generate all molecules in batches
+    # Generate all molecules in batches (with optional best-of-N reranking)
     all_gen_ids = []
     for b in tqdm(range(math.ceil(n_total / bs)), desc="  Generating"):
-        batch_ids = _generate_cfg_batch(
-            model, tokenizer, hf_tokenizer,
-            prompts[b*bs : (b+1)*bs], device,
-            cfg_scale=cfg_scale,
-            temperature=temperature,
-            num_steps=num_steps,
-        )
+        batch_prompts = prompts[b*bs : (b+1)*bs]
+        if rerank_n > 1:
+            batch_ids = _rerank_candidates(
+                model, tokenizer, hf_tokenizer, scorer, scorer_tokenizer,
+                batch_prompts, device,
+                cfg_scale=cfg_scale, temperature=temperature,
+                num_steps=num_steps, rerank_n=rerank_n,
+            )
+        else:
+            batch_ids = _generate_cfg_batch(
+                model, tokenizer, hf_tokenizer,
+                batch_prompts, device,
+                cfg_scale=cfg_scale, temperature=temperature, num_steps=num_steps,
+            )
         all_gen_ids.extend(batch_ids)
 
     # Optional post-hoc EOS truncation
@@ -704,6 +843,8 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
     tag = f"_cfg{cfg_scale}_t{temperature}_s{num_steps}"
     if eos_truncate:
         tag += "_eost"
+    if rerank_n > 1:
+        tag += f"_rerank{rerank_n}"
     base_csv = Path(CONFIG["eval_csv"])
     out_csv  = base_csv.with_stem(base_csv.stem + tag)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -1098,6 +1239,11 @@ if __name__ == "__main__":
                         help="Model size tag used in checkpoint/output filenames (default: 27M)")
     parser.add_argument("--num_epochs", type=int, default=None,
                         help="Override CONFIG num_epochs (default: 10)")
+    parser.add_argument("--rerank_n", type=int, default=1,
+                        help="Best-of-N contrastive reranking: generate N candidates per "
+                             "prompt and keep the one with highest cosine similarity to "
+                             "the text prompt in the contrastive embedding space. "
+                             "Requires --contrastive_ckpt. Default=1 (no reranking).")
     args = parser.parse_args()
 
     if args.encoder == "contrastive" and args.contrastive_ckpt is None:
@@ -1105,6 +1251,8 @@ if __name__ == "__main__":
             "--contrastive_ckpt is required when --encoder contrastive is set.\n"
             "Example: --contrastive_ckpt checkpoints/contrastive_bge_molinst.pt"
         )
+    if args.rerank_n > 1 and args.contrastive_ckpt is None:
+        parser.error("--contrastive_ckpt is required when --rerank_n > 1")
 
     # Apply run identity to CONFIG paths before anything else
     _apply_run_config(args.model_size, args.encoder)
@@ -1174,9 +1322,18 @@ if __name__ == "__main__":
         print(f"  val_loss={ckpt.get('val_loss', float('nan')):.4f}  "
               f"step={ckpt.get('step', '?')}")
 
+        rerank_scorer, rerank_scorer_tok = None, None
+        if args.rerank_n > 1:
+            rerank_scorer, rerank_scorer_tok = _load_contrastive_scorer(
+                args.contrastive_ckpt, device
+            )
+
         evaluate_test_set(model, tokenizer, hf_tokenizer, device,
                           test_csv, eos_truncate=args.eos_truncate,
                           cfg_scale=args.cfg, temperature=args.temp,
-                          num_steps=args.steps)
+                          num_steps=args.steps,
+                          rerank_n=args.rerank_n,
+                          scorer=rerank_scorer,
+                          scorer_tokenizer=rerank_scorer_tok)
     else:
         train()

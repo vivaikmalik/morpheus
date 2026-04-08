@@ -1,0 +1,92 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[device] mps
+[mode]   eval_only  encoder=contrastive  model_size=27M_scibert_20ep  eos_truncate=False
+[tokenizer] text tokenizer: allenai/scibert_scivocab_uncased
+[data] ChEBI-20 CSVs already exist — train=20,158  val=2,504  test=2,542
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 6812.22it/s]
+[1mBertModel LOAD REPORT[0m from: BAAI/bge-large-en-v1.5
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 40870.95it/s]
+[1mBertModel LOAD REPORT[0m from: allenai/scibert_scivocab_uncased
+Key                                        | Status     |  | 
+-------------------------------------------+------------+--+-
+cls.predictions.decoder.weight             | UNEXPECTED |  | 
+cls.predictions.decoder.bias               | UNEXPECTED |  | 
+cls.seq_relationship.weight                | UNEXPECTED |  | 
+cls.seq_relationship.bias                  | UNEXPECTED |  | 
+cls.predictions.bias                       | UNEXPECTED |  | 
+cls.predictions.transform.dense.weight     | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.bias   | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.weight | UNEXPECTED |  | 
+cls.predictions.transform.dense.bias       | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[encoder] contrastive  checkpoint=contrastive_scibert_chembl.pt  text_model=allenai/scibert_scivocab_uncased  hidden_dim=768  epoch=25  best_val_loss=0.5027
+[model] encoder_proj created: 768 → 1024  (trainable)
+[ckpt] Loading chebi20_27M_scibert_20ep_contrastive.pt ...
+  val_loss=0.3769  step=11000
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 35492.05it/s]
+[1mBertModel LOAD REPORT[0m from: allenai/scibert_scivocab_uncased
+Key                                        | Status     |  | 
+-------------------------------------------+------------+--+-
+cls.predictions.decoder.weight             | UNEXPECTED |  | 
+cls.predictions.decoder.bias               | UNEXPECTED |  | 
+cls.seq_relationship.weight                | UNEXPECTED |  | 
+cls.seq_relationship.bias                  | UNEXPECTED |  | 
+cls.predictions.bias                       | UNEXPECTED |  | 
+cls.predictions.transform.dense.weight     | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.bias   | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.weight | UNEXPECTED |  | 
+cls.predictions.transform.dense.bias       | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[scorer] loaded  ckpt=contrastive_scibert_chembl.pt  text=allenai/scibert_scivocab_uncased  proj_dim=768  mol_hidden=256
+
+=================================================================
+  TEST SET EVALUATION — chebi20_test.csv
+  cfg=1.5  T=0.6  steps=50
+=================================================================
+  Generating:   0%|          | 0/80 [00:00<?, ?it/s]  Generating:   1%|▏         | 1/80 [01:57<2:34:49, 117.59s/it]Exception in thread Thread-auto_conversion:
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/huggingface_hub/utils/_http.py", line 761, in hf_raise_for_status
+    response.raise_for_status()
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/httpx/_models.py", line 829, in raise_for_status
+    raise HTTPStatusError(message, request=request, response=self)
+httpx.HTTPStatusError: Server error '504 Gateway Time-out' for url 'https://huggingface.co/api/models/allenai/scibert_scivocab_uncased/commits/main'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/504
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/transformers/safetensors_conversion.py", line 117, in auto_conversion
+    raise e
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/transformers/safetensors_conversion.py", line 96, in auto_conversion
+    sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/transformers/safetensors_conversion.py", line 69, in get_conversion_pr_reference
+    pr = previous_pr(api, model_id, pr_title, token=token)
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/transformers/safetensors_conversion.py", line 13, in previous_pr
+    main_commit = api.list_repo_commits(model_id, token=token)[0].commit_id
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py", line 89, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/huggingface_hub/hf_api.py", line 3688, in list_repo_commits
+    return [
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/huggingface_hub/hf_api.py", line 3688, in <listcomp>
+    return [
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/huggingface_hub/utils/_pagination.py", line 37, in paginate
+    hf_raise_for_status(r)
+  File "/opt/anaconda3/envs/molgen/lib/python3.10/site-packages/huggingface_hub/utils/_http.py", line 889, in hf_raise_for_status
+    raise _format(HfHubHTTPError, str(e), response) from e
+huggingface_hub.errors.HfHubHTTPError: Server error '504 Gateway Time-out' for url 'https://huggingface.co/api/models/allenai/scibert_scivocab_uncased/commits/main' (Amz CF ID: ntOaCQJMphm2NkkvVjxUMy8bvjITlipazy28OftiPS7mNGDhk0Wv9A==)
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/504
+  Generating:   2%|▎         | 2/80 [04:13<2:46:58, 128.44s/it]  Generating:   4%|▍         | 3/80 [06:48<3:00:16, 140.47s/it]

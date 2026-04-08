@@ -1,0 +1,85 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[device] mps
+[mode]   eval_only  encoder=contrastive  model_size=27M_scibert_20ep  eos_truncate=False
+[tokenizer] text tokenizer: allenai/scibert_scivocab_uncased
+[data] ChEBI-20 CSVs already exist — train=20,158  val=2,504  test=2,542
+Loading weights:   0%|          | 0/391 [00:00<?, ?it/s]Loading weights: 100%|██████████| 391/391 [00:00<00:00, 6739.04it/s]
+[1mBertModel LOAD REPORT[0m from: BAAI/bge-large-en-v1.5
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 45840.65it/s]
+[1mBertModel LOAD REPORT[0m from: allenai/scibert_scivocab_uncased
+Key                                        | Status     |  | 
+-------------------------------------------+------------+--+-
+cls.predictions.decoder.weight             | UNEXPECTED |  | 
+cls.predictions.transform.dense.bias       | UNEXPECTED |  | 
+cls.seq_relationship.weight                | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.bias   | UNEXPECTED |  | 
+cls.predictions.transform.dense.weight     | UNEXPECTED |  | 
+cls.seq_relationship.bias                  | UNEXPECTED |  | 
+cls.predictions.decoder.bias               | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.weight | UNEXPECTED |  | 
+cls.predictions.bias                       | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[encoder] contrastive  checkpoint=contrastive_scibert_chebi20_projonly.pt  text_model=allenai/scibert_scivocab_uncased  hidden_dim=768  epoch=25  best_val_loss=0.4594
+[model] encoder_proj created: 768 → 1024  (trainable)
+[ckpt] Loading chebi20_27M_scibert_20ep_contrastive.pt ...
+  val_loss=0.3769  step=11000
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 69186.55it/s]
+[1mBertModel LOAD REPORT[0m from: allenai/scibert_scivocab_uncased
+Key                                        | Status     |  | 
+-------------------------------------------+------------+--+-
+cls.predictions.decoder.weight             | UNEXPECTED |  | 
+cls.predictions.transform.dense.bias       | UNEXPECTED |  | 
+cls.seq_relationship.weight                | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.bias   | UNEXPECTED |  | 
+cls.predictions.transform.dense.weight     | UNEXPECTED |  | 
+cls.seq_relationship.bias                  | UNEXPECTED |  | 
+cls.predictions.decoder.bias               | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.weight | UNEXPECTED |  | 
+cls.predictions.bias                       | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[scorer] loaded  ckpt=contrastive_scibert_chebi20_projonly.pt  text=allenai/scibert_scivocab_uncased  proj_dim=768  mol_hidden=256
+
+=================================================================
+  TEST SET EVALUATION — chebi20_test.csv
+  cfg=1.5  T=0.6  steps=50
+=================================================================
+  Generating:   0%|          | 0/80 [00:00<?, ?it/s]  Generating:   1%|▏         | 1/80 [01:54<2:30:15, 114.12s/it]  Generating:   2%|▎         | 2/80 [04:24<2:55:57, 135.36s/it]  Generating:   4%|▍         | 3/80 [07:04<3:08:25, 146.83s/it]  Generating:   5%|▌         | 4/80 [09:35<3:08:09, 148.54s/it]  Generating:   6%|▋         | 5/80 [12:08<3:07:14, 149.80s/it]  Generating:   8%|▊         | 6/80 [14:38<3:05:00, 150.00s/it]  Generating:   9%|▉         | 7/80 [17:13<3:04:20, 151.51s/it]  Generating:  10%|█         | 8/80 [19:43<3:01:29, 151.24s/it]  Generating:  11%|█▏        | 9/80 [22:16<2:59:28, 151.67s/it]  Generating:  12%|█▎        | 10/80 [24:46<2:56:29, 151.28s/it]  Generating:  14%|█▍        | 11/80 [27:18<2:54:02, 151.35s/it]  Generating:  15%|█▌        | 12/80 [29:49<2:51:31, 151.35s/it]  Generating:  16%|█▋        | 13/80 [32:21<2:49:07, 151.46s/it]  Generating:  18%|█▊        | 14/80 [34:51<2:46:19, 151.20s/it]  Generating:  19%|█▉        | 15/80 [37:24<2:44:10, 151.55s/it]  Generating:  20%|██        | 16/80 [39:53<2:40:55, 150.87s/it]  Generating:  21%|██▏       | 17/80 [42:25<2:38:49, 151.27s/it]  Generating:  22%|██▎       | 18/80 [44:56<2:36:09, 151.12s/it]  Generating:  24%|██▍       | 19/80 [47:28<2:33:45, 151.24s/it]  Generating:  25%|██▌       | 20/80 [49:59<2:31:16, 151.28s/it]  Generating:  26%|██▋       | 21/80 [52:28<2:28:13, 150.74s/it]  Generating:  28%|██▊       | 22/80 [55:00<2:26:05, 151.13s/it]  Generating:  29%|██▉       | 23/80 [57:29<2:22:59, 150.51s/it]  Generating:  30%|███       | 24/80 [1:00:02<2:21:01, 151.10s/it]  Generating:  31%|███▏      | 25/80 [1:02:33<2:18:23, 150.97s/it]  Generating:  32%|███▎      | 26/80 [1:05:05<2:16:18, 151.46s/it]  Generating:  34%|███▍      | 27/80 [1:07:36<2:13:41, 151.34s/it]  Generating:  35%|███▌      | 28/80 [1:10:09<2:11:27, 151.69s/it]  Generating:  36%|███▋      | 29/80 [1:12:39<2:08:36, 151.31s/it]  Generating:  38%|███▊      | 30/80 [1:15:12<2:06:21, 151.64s/it]  Generating:  39%|███▉      | 31/80 [1:17:43<2:03:40, 151.43s/it]  Generating:  40%|████      | 32/80 [1:20:15<2:01:26, 151.81s/it]  Generating:  41%|████▏     | 33/80 [1:22:45<1:58:31, 151.30s/it]  Generating:  42%|████▎     | 34/80 [1:25:17<1:56:04, 151.39s/it]  Generating:  44%|████▍     | 35/80 [1:27:47<1:53:17, 151.07s/it]  Generating:  45%|████▌     | 36/80 [1:30:18<1:50:46, 151.06s/it]  Generating:  46%|████▋     | 37/80 [1:32:49<1:48:04, 150.80s/it]  Generating:  48%|████▊     | 38/80 [1:35:21<1:45:50, 151.21s/it]  Generating:  49%|████▉     | 39/80 [1:37:59<1:44:49, 153.40s/it]  Generating:  50%|█████     | 40/80 [1:41:49<1:57:37, 176.43s/it]  Generating:  51%|█████▏    | 41/80 [1:45:53<2:07:45, 196.56s/it]  Generating:  52%|█████▎    | 42/80 [1:50:04<2:14:56, 213.06s/it]  Generating:  54%|█████▍    | 43/80 [1:53:54<2:14:24, 217.95s/it]  Generating:  55%|█████▌    | 44/80 [1:56:32<2:00:02, 200.07s/it]  Generating:  56%|█████▋    | 45/80 [1:59:03<1:48:02, 185.23s/it]  Generating:  57%|█████▊    | 46/80 [2:01:36<1:39:33, 175.70s/it]  Generating:  59%|█████▉    | 47/80 [2:04:07<1:32:26, 168.07s/it]  Generating:  60%|██████    | 48/80 [2:06:38<1:26:58, 163.06s/it]  Generating:  61%|██████▏   | 49/80 [2:09:08<1:22:15, 159.20s/it]  Generating:  62%|██████▎   | 50/80 [2:11:40<1:18:27, 156.92s/it]  Generating:  64%|██████▍   | 51/80 [2:14:08<1:14:33, 154.25s/it]  Generating:  65%|██████▌   | 52/80 [2:16:41<1:11:51, 153.98s/it]  Generating:  66%|██████▋   | 53/80 [2:19:12<1:08:52, 153.05s/it]  Generating:  68%|██████▊   | 54/80 [2:21:44<1:06:09, 152.67s/it]  Generating:  69%|██████▉   | 55/80 [2:24:17<1:03:38, 152.75s/it]  Generating:  70%|███████   | 56/80 [2:26:49<1:01:05, 152.72s/it]  Generating:  71%|███████▏  | 57/80 [2:29:19<58:11, 151.80s/it]    Generating:  72%|███████▎  | 58/80 [2:31:52<55:50, 152.29s/it]  Generating:  74%|███████▍  | 59/80 [2:34:23<53:06, 151.72s/it]  Generating:  75%|███████▌  | 60/80 [2:36:54<50:30, 151.51s/it]  Generating:  76%|███████▋  | 61/80 [2:39:23<47:45, 150.81s/it]  Generating:  78%|███████▊  | 62/80 [2:41:54<45:18, 151.02s/it]  Generating:  79%|███████▉  | 63/80 [2:44:24<42:39, 150.57s/it]  Generating:  80%|████████  | 64/80 [2:46:56<40:16, 151.03s/it]  Generating:  81%|████████▏ | 65/80 [2:49:26<37:39, 150.66s/it]  Generating:  82%|████████▎ | 66/80 [2:51:57<35:12, 150.92s/it]  Generating:  84%|████████▍ | 67/80 [2:54:27<32:38, 150.63s/it]  Generating:  85%|████████▌ | 68/80 [2:56:59<30:09, 150.83s/it]  Generating:  86%|████████▋ | 69/80 [2:59:31<27:44, 151.32s/it]  Generating:  88%|████████▊ | 70/80 [3:02:02<25:12, 151.20s/it]  Generating:  89%|████████▉ | 71/80 [3:04:32<22:37, 150.82s/it]  Generating:  90%|█████████ | 72/80 [3:07:03<20:07, 150.96s/it]  Generating:  91%|█████████▏| 73/80 [3:09:34<17:36, 150.96s/it]  Generating:  92%|█████████▎| 74/80 [3:12:06<15:06, 151.13s/it]  Generating:  94%|█████████▍| 75/80 [3:14:36<12:33, 150.74s/it]  Generating:  95%|█████████▌| 76/80 [3:17:07<10:03, 150.81s/it]  Generating:  96%|█████████▋| 77/80 [3:19:36<07:31, 150.49s/it]  Generating:  98%|█████████▊| 78/80 [3:22:07<05:01, 150.62s/it]  Generating:  99%|█████████▉| 79/80 [3:24:38<02:30, 150.51s/it]  Generating: 100%|██████████| 80/80 [3:25:42<00:00, 124.65s/it]  Generating: 100%|██████████| 80/80 [3:25:42<00:00, 154.28s/it]
+  Scoring:   0%|          | 0/2542 [00:00<?, ?it/s]  Scoring:   1%|          | 23/2542 [00:00<00:11, 225.17it/s]  Scoring:   2%|▏         | 62/2542 [00:00<00:07, 321.01it/s]  Scoring:   4%|▍         | 101/2542 [00:00<00:07, 344.50it/s]  Scoring:   6%|▌         | 144/2542 [00:00<00:06, 373.51it/s]  Scoring:   7%|▋         | 182/2542 [00:00<00:06, 374.32it/s]  Scoring:   9%|▊         | 220/2542 [00:00<00:06, 356.88it/s]  Scoring:  10%|█         | 260/2542 [00:00<00:06, 368.71it/s]  Scoring:  12%|█▏        | 298/2542 [00:00<00:06, 338.90it/s]  Scoring:  13%|█▎        | 333/2542 [00:00<00:06, 338.80it/s]  Scoring:  14%|█▍        | 368/2542 [00:01<00:06, 338.45it/s]  Scoring:  16%|█▌        | 406/2542 [00:01<00:06, 350.25it/s]  Scoring:  17%|█▋        | 444/2542 [00:01<00:05, 358.37it/s]  Scoring:  19%|█▉        | 481/2542 [00:01<00:06, 341.58it/s]  Scoring:  20%|██        | 517/2542 [00:01<00:05, 342.19it/s]  Scoring:  22%|██▏       | 552/2542 [00:01<00:06, 330.69it/s]  Scoring:  23%|██▎       | 589/2542 [00:01<00:05, 333.20it/s]  Scoring:  25%|██▍       | 625/2542 [00:01<00:05, 339.22it/s]  Scoring:  26%|██▌       | 660/2542 [00:01<00:05, 333.86it/s]  Scoring:  27%|██▋       | 696/2542 [00:02<00:05, 340.47it/s]  Scoring:  29%|██▉       | 731/2542 [00:02<00:05, 324.57it/s]  Scoring:  30%|███       | 769/2542 [00:02<00:05, 338.48it/s]  Scoring:  32%|███▏      | 804/2542 [00:02<00:05, 337.95it/s]  Scoring:  33%|███▎      | 838/2542 [00:02<00:05, 335.10it/s]  Scoring:  34%|███▍      | 872/2542 [00:02<00:05, 315.77it/s]  Scoring:  36%|███▌      | 905/2542 [00:02<00:05, 319.17it/s]  Scoring:  37%|███▋      | 938/2542 [00:02<00:05, 314.57it/s]  Scoring:  38%|███▊      | 972/2542 [00:02<00:05, 313.50it/s]  Scoring:  40%|███▉      | 1007/2542 [00:03<00:04, 318.65it/s]  Scoring:  41%|████      | 1041/2542 [00:03<00:04, 323.20it/s]  Scoring:  42%|████▏     | 1074/2542 [00:03<00:04, 323.99it/s]  Scoring:  44%|████▎     | 1107/2542 [00:03<00:04, 306.87it/s]  Scoring:  45%|████▌     | 1144/2542 [00:03<00:04, 323.21it/s]  Scoring:  46%|████▋     | 1179/2542 [00:03<00:04, 328.53it/s]  Scoring:  48%|████▊     | 1213/2542 [00:03<00:04, 330.54it/s]  Scoring:  49%|████▉     | 1247/2542 [00:03<00:04, 323.50it/s]  Scoring:  50%|█████     | 1283/2542 [00:03<00:03, 333.10it/s]  Scoring:  52%|█████▏    | 1318/2542 [00:03<00:03, 334.03it/s]  Scoring:  53%|█████▎    | 1355/2542 [00:04<00:03, 343.88it/s]  Scoring:  55%|█████▍    | 1392/2542 [00:04<00:03, 351.32it/s]  Scoring:  56%|█████▋    | 1430/2542 [00:04<00:03, 351.46it/s]  Scoring:  58%|█████▊    | 1466/2542 [00:04<00:03, 309.93it/s]  Scoring:  59%|█████▉    | 1502/2542 [00:04<00:03, 322.11it/s]  Scoring:  60%|██████    | 1537/2542 [00:04<00:03, 328.41it/s]  Scoring:  62%|██████▏   | 1574/2542 [00:04<00:02, 336.36it/s]  Scoring:  63%|██████▎   | 1609/2542 [00:04<00:02, 330.92it/s]  Scoring:  65%|██████▍   | 1645/2542 [00:04<00:02, 338.52it/s]  Scoring:  66%|██████▌   | 1680/2542 [00:05<00:02, 336.25it/s]  Scoring:  67%|██████▋   | 1714/2542 [00:05<00:02, 336.35it/s]  Scoring:  69%|██████▉   | 1755/2542 [00:05<00:02, 351.96it/s]  Scoring:  70%|███████   | 1791/2542 [00:05<00:02, 351.44it/s]  Scoring:  72%|███████▏  | 1832/2542 [00:05<00:01, 368.10it/s]  Scoring:  74%|███████▎  | 1869/2542 [00:05<00:01, 368.31it/s]  Scoring:  75%|███████▌  | 1911/2542 [00:05<00:01, 379.85it/s]  Scoring:  77%|███████▋  | 1950/2542 [00:05<00:01, 378.78it/s]  Scoring:  78%|███████▊  | 1993/2542 [00:05<00:01, 392.69it/s]  Scoring:  80%|███████▉  | 2033/2542 [00:05<00:01, 380.57it/s]  Scoring:  82%|████████▏ | 2072/2542 [00:06<00:01, 343.79it/s]  Scoring:  83%|████████▎ | 2109/2542 [00:06<00:01, 350.12it/s]  Scoring:  84%|████████▍ | 2146/2542 [00:06<00:01, 352.05it/s]  Scoring:  86%|████████▌ | 2182/2542 [00:06<00:01, 335.75it/s]  Scoring:  87%|████████▋ | 2216/2542 [00:06<00:00, 336.00it/s]  Scoring:  89%|████████▊ | 2255/2542 [00:06<00:00, 348.00it/s]  Scoring:  90%|█████████ | 2291/2542 [00:06<00:00, 335.54it/s]  Scoring:  92%|█████████▏| 2327/2542 [00:06<00:00, 341.72it/s]  Scoring:  93%|█████████▎| 2362/2542 [00:06<00:00, 344.06it/s]  Scoring:  94%|█████████▍| 2397/2542 [00:07<00:00, 341.62it/s]  Scoring:  96%|█████████▌| 2432/2542 [00:07<00:00, 343.64it/s]  Scoring:  97%|█████████▋| 2467/2542 [00:07<00:00, 330.71it/s]  Scoring:  98%|█████████▊| 2501/2542 [00:07<00:00, 332.27it/s]  Scoring: 100%|█████████▉| 2535/2542 [00:07<00:00, 320.95it/s]  Scoring: 100%|██████████| 2542/2542 [00:07<00:00, 339.09it/s]
+
+  Per-row results → /Users/lirobert/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents - Li’s MacBook Air/UdeM/IFT6759 (Advanced Machine Learning Projects)/molgen/outputs/chebi20_27M_scibert_20ep_contrastive_eval_cfg1.5_t0.6_s50_rerank10.csv
+
+=================================================================
+  ChEBI-20 EVALUATION — Morpheus 27M_scibert_20ep [contrastive]
+  Checkpoint : chebi20_27M_scibert_20ep_contrastive.pt
+  Test set   : 2542 molecules
+  CFG scale  : 1.5  Temperature: 0.6  Steps: 50
+=================================================================
+  Validity (%)                     100.0%
+  Exact Match (%)                    0.8%
+  BLEU-2 (char)                   0.6418
+  BLEU-4 (char)                   0.5212
+  BLEU-2 (atom)                   0.6211
+  BLEU-4 (atom)                   0.4776
+  Levenshtein Similarity          0.5380
+  Morgan FP Tanimoto (valid)      0.3104
+  MACCS FP Tanimoto  (valid)      0.6512
+  RDK FP Tanimoto    (valid)      0.4175
+=================================================================
+
+Reference: TGM-DLM (AAAI 2024) on ChEBI-20
+  Validity: 87.1% (w/ correction)  BLEU-2: 0.826  BLEU-4: ~0.77 (atom-level, comparable)
+  Levenshtein: 17.003 (raw, not normalized)  Morgan: 0.688  MACCS: 0.854  RDK: 0.739
+  ! TGM-DLM: 180M params, SciBERT encoder, ~100K+ steps, A100 GPU.
+=================================================================
+
+  Summary → /Users/lirobert/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents - Li’s MacBook Air/UdeM/IFT6759 (Advanced Machine Learning Projects)/molgen/outputs/chebi20_27M_scibert_20ep_contrastive_eval_summary_cfg1.5_t0.6_s50_rerank10.txt
