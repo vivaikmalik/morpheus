@@ -80,8 +80,8 @@ class CrossAttention(nn.Module):
         self.out_proj = nn.Linear(hidden_size, hidden_size)
  
         # Zero-init output projection — cross-attention starts as identity
-        #nn.init.zeros_(self.out_proj.weight)
-        #nn.init.zeros_(self.out_proj.bias)
+        nn.init.zeros_(self.out_proj.weight)
+        nn.init.zeros_(self.out_proj.bias)
  
         self.dropout = nn.Dropout(dropout)
  

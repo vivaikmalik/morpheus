@@ -27,7 +27,7 @@ CONFIG = {
     "text_model": "allenai/scibert_scivocab_uncased",
     "max_text_len": 256, "uncond_prob": 0.2,
     "batch_size": 64, "gradient_accumulation": 1,
-    "new_lr": 3e-4, "pretrained_lr": 1e-6,
+    "new_lr": 5e-5, "pretrained_lr": 5e-5,
     "weight_decay": 0.01, "max_grad_norm": 2.2,
     "num_epochs": 333, "warmup_steps": 7700,
     "ema_decay": 0.9999,
