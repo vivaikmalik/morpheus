@@ -29,7 +29,7 @@ CONFIG = {
     "batch_size": 64, "gradient_accumulation": 1,
     "new_lr": 3e-4, "pretrained_lr": 1e-6,
     "weight_decay": 0.01, "max_grad_norm": 2.2,
-    "num_epochs": 400, "warmup_steps": 10000,
+    "num_epochs": 333, "warmup_steps": 7700,
     "ema_decay": 0.9999,
     "num_workers": 2, "seed": 42, "use_precomputed": True,
     "log_every": 50, "val_every": 1000, "save_every": 5000,
@@ -234,7 +234,7 @@ def train(args):
     acc_steps = CONFIG["gradient_accumulation"]
     steps_per_epoch = len(train_loader) // acc_steps
     total_steps = steps_per_epoch * CONFIG["num_epochs"]
-    new_kw = ["cross_attention", "text_proj", "null_token", "norm_cross"]
+    new_kw = ["cross_attention", "text_proj", "null_token", "norm_cross", "pos_embedding"]
     new_params, pre_params = [], []
     for name, p in model.named_parameters():
         if not p.requires_grad: continue
