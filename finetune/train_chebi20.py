@@ -462,7 +462,8 @@ def run_validation(model, val_loader, device, tokenizer):
 
 @torch.no_grad()
 def _generate_cfg_batch(model, tokenizer, hf_tokenizer, prompts, device,
-                        cfg_scale, temperature, num_steps):
+                        cfg_scale, temperature, num_steps,
+                        refine_passes=1, refine_mask_ratio=0.2):
     max_length = CONFIG["max_length"]
     num_mols   = len(prompts)
 
@@ -500,6 +501,66 @@ def _generate_cfg_batch(model, tokenizer, hf_tokenizer, prompts, device,
             sampled.scatter_(1, mask_idx, tokenizer.mask_token_id)
 
         input_ids = sampled
+
+    # ── Iterative refinement passes ───────────────────────────────────────────
+    # refine_passes=1 (default): this block is skipped entirely.
+    # Each pass: score all committed positions at t=0, re-mask the
+    # bottom refine_mask_ratio fraction, then re-denoise with a short
+    # schedule starting from t=refine_mask_ratio (keeps model in-distribution).
+    refine_steps = max(10, num_steps // 5)
+    for _ in range(refine_passes - 1):
+        # Score committed tokens with a clean t=0 forward pass.
+        step_zero   = torch.zeros(num_mols, 1, device=device)
+        cond_l      = model(input_ids, step_zero, text_embeds,  text_padding_mask)
+        uncond_l    = model(input_ids, step_zero, null_embeds,   text_padding_mask)
+        logits_r    = uncond_l + cfg_scale * (cond_l - uncond_l)
+        probs_r     = torch.softmax(logits_r / temperature, dim=-1)
+        # Confidence of each committed token at t=0.
+        confidence  = torch.gather(probs_r, 2, input_ids.unsqueeze(-1)).squeeze(-1)
+
+        # Protect PAD positions (never re-mask).
+        # EOS positions ARE eligible — EOS placement is a known failure mode.
+        pad_mask   = (input_ids == tokenizer.pad_token_id)
+        confidence = confidence.masked_fill(pad_mask, 1.0)
+
+        # Re-mask the bottom refine_mask_ratio positions per molecule.
+        n_remask   = max(1, int(refine_mask_ratio * max_length))
+        _, low_idx = torch.topk(confidence, n_remask, dim=-1, largest=False)
+        input_ids  = input_ids.scatter(1, low_idx, tokenizer.mask_token_id)
+
+        # Short denoising schedule starting from t=refine_mask_ratio → 0.
+        # Starting at t≈refine_mask_ratio matches the training distribution:
+        # alpha_t = cos²(t·π/2) ≈ (1 - refine_mask_ratio) fraction unmasked.
+        t_start    = refine_mask_ratio
+        t_vals_r   = torch.linspace(t_start, 0.0, refine_steps, device=device)
+
+        for step_idx, t_val in enumerate(t_vals_r):
+            is_masked = (input_ids == tokenizer.mask_token_id)
+
+            step_t      = t_val.repeat(num_mols).unsqueeze(-1)
+            cond_l      = model(input_ids, step_t, text_embeds,  text_padding_mask)
+            uncond_l    = model(input_ids, step_t, null_embeds,   text_padding_mask)
+            logits      = uncond_l + cfg_scale * (cond_l - uncond_l)
+
+            if step_idx < refine_steps - 1:
+                logits[:, :, tokenizer.mask_token_id] = float("-inf")
+
+            probs   = torch.softmax(logits / temperature, dim=-1)
+            sampled = torch.distributions.Categorical(probs=probs).sample()
+            conf_r  = torch.gather(probs, 2, sampled.unsqueeze(-1)).squeeze(-1)
+
+            # Only update positions that were masked at the start of this step.
+            input_ids = torch.where(is_masked, sampled, input_ids)
+
+            # Re-mask the least confident currently-masked positions.
+            alpha_t     = (torch.cos(t_val * math.pi / 2) ** 2).item()
+            n_still_masked = is_masked.sum(dim=-1).float().mean().item()
+            num_to_mask = int((1.0 - alpha_t) * n_still_masked)
+            if num_to_mask > 0 and step_idx < refine_steps - 1:
+                # Only consider positions that were masked at step start.
+                conf_masked = conf_r.masked_fill(~is_masked, 1.0)
+                _, mask_idx = torch.topk(conf_masked, num_to_mask, dim=-1, largest=False)
+                input_ids.scatter_(1, mask_idx, tokenizer.mask_token_id)
 
     return input_ids.cpu().tolist()
 
@@ -567,7 +628,8 @@ def _apply_eos_truncation(model, tokenizer, hf_tokenizer,
 
 @torch.no_grad()
 def _rerank_candidates(model, tokenizer, hf_tokenizer, scorer, scorer_tokenizer,
-                       prompts, device, cfg_scale, temperature, num_steps, rerank_n):
+                       prompts, device, cfg_scale, temperature, num_steps, rerank_n,
+                       refine_passes=1, refine_mask_ratio=0.2):
     """
     Generate rerank_n candidates per prompt and return the highest-scoring one
     (by cosine similarity in the contrastive embedding space).
@@ -583,7 +645,9 @@ def _rerank_candidates(model, tokenizer, hf_tokenizer, scorer, scorer_tokenizer,
         all_candidates.append(
             _generate_cfg_batch(model, tokenizer, hf_tokenizer, prompts, device,
                                 cfg_scale=cfg_scale, temperature=temperature,
-                                num_steps=num_steps)
+                                num_steps=num_steps,
+                                refine_passes=refine_passes,
+                                refine_mask_ratio=refine_mask_ratio)
         )
 
     # Encode all text prompts once with the scorer's own tokenizer.
@@ -718,7 +782,9 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
                       num_steps: int = None,
                       rerank_n: int = 1,
                       scorer=None,
-                      scorer_tokenizer=None):
+                      scorer_tokenizer=None,
+                      refine_passes: int = 1,
+                      refine_mask_ratio: float = 0.2):
     """
     Generate molecules for all ChEBI-20 test prompts and compute TGM-DLM metrics.
     Saves per-row CSV + summary text file.
@@ -756,12 +822,14 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
                 batch_prompts, device,
                 cfg_scale=cfg_scale, temperature=temperature,
                 num_steps=num_steps, rerank_n=rerank_n,
+                refine_passes=refine_passes, refine_mask_ratio=refine_mask_ratio,
             )
         else:
             batch_ids = _generate_cfg_batch(
                 model, tokenizer, hf_tokenizer,
                 batch_prompts, device,
                 cfg_scale=cfg_scale, temperature=temperature, num_steps=num_steps,
+                refine_passes=refine_passes, refine_mask_ratio=refine_mask_ratio,
             )
         all_gen_ids.extend(batch_ids)
 
@@ -845,6 +913,8 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
         tag += "_eost"
     if rerank_n > 1:
         tag += f"_rerank{rerank_n}"
+    if refine_passes > 1:
+        tag += f"_refine{refine_passes}x{int(refine_mask_ratio*100)}pct"
     base_csv = Path(CONFIG["eval_csv"])
     out_csv  = base_csv.with_stem(base_csv.stem + tag)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -1244,6 +1314,13 @@ if __name__ == "__main__":
                              "prompt and keep the one with highest cosine similarity to "
                              "the text prompt in the contrastive embedding space. "
                              "Requires --contrastive_ckpt. Default=1 (no reranking).")
+    parser.add_argument("--refine_passes", type=int, default=1,
+                        help="Number of iterative refinement passes (default=1, no refinement). "
+                             "Each pass re-masks the lowest-confidence positions and re-denoises "
+                             "with a short schedule starting at t=refine_mask_ratio.")
+    parser.add_argument("--refine_mask_ratio", type=float, default=0.2,
+                        help="Fraction of positions to re-mask each refinement pass (default=0.2). "
+                             "Also sets the t_start of the refinement denoising schedule.")
     args = parser.parse_args()
 
     if args.encoder == "contrastive" and args.contrastive_ckpt is None:
@@ -1334,6 +1411,8 @@ if __name__ == "__main__":
                           num_steps=args.steps,
                           rerank_n=args.rerank_n,
                           scorer=rerank_scorer,
-                          scorer_tokenizer=rerank_scorer_tok)
+                          scorer_tokenizer=rerank_scorer_tok,
+                          refine_passes=args.refine_passes,
+                          refine_mask_ratio=args.refine_mask_ratio)
     else:
         train()

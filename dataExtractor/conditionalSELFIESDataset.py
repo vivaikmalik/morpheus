@@ -1,3 +1,5 @@
+# NOTE: This file is used by training/ and inference/ pipelines.
+# Canonical version with ChEBI-20 + contrastive features: finetune/conditionalSELFIESDataset.py
 import torch
 from torch.utils.data import Dataset
 

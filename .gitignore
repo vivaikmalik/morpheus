@@ -4,7 +4,4 @@ __pycache__/
 wandb/
 *.pt
 checkpoints/*.pt
-wandb/
-__pycache__/
-*.pyc
 data/raw/

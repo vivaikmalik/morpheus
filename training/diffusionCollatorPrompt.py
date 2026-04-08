@@ -1,3 +1,5 @@
+# NOTE: Not imported by any training/ script (training/ uses diffusionCollator.py instead).
+# Canonical prompt-collator: finetune/diffusionCollatorPrompt.py
 import torch
 import sys
 from pathlib import Path
