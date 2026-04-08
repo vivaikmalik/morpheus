@@ -43,7 +43,7 @@ def smiles_to_selfies(smiles):
         return None
 
 
-def fits_tokenizer(selfies_str, tokenizer, max_length=74):
+def fits_tokenizer(selfies_str, tokenizer, max_length=259):
     """
     Check if every token in the SELFIES string exists in our vocabulary
     and the sequence fits within max_length (including EOS).
@@ -119,7 +119,7 @@ def process_split(df, tokenizer, max_length, split_name):
 def main():
     # Load tokenizer
     tokenizer = ChemicalTokenizer(str(ROOT / "chemical_tokenizer.json"))
-    max_length = 74
+    max_length = 259
 
     print(f"Tokenizer vocab size: {tokenizer.vocab_size}")
     print(f"Max sequence length:  {max_length}")

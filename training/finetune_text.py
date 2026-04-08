@@ -22,7 +22,7 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 
 CONFIG = {
     "vocab_size": 110, "hidden_size": 1024, "num_heads": 16,
-    "ffn_dim": 4096, "num_layers": 12, "max_length": 74,
+    "ffn_dim": 4096, "num_layers": 12, "max_length": 256,
     "dropout": 0.11,
     "text_model": "allenai/scibert_scivocab_uncased",
     "max_text_len": 256, "uncond_prob": 0.2,
@@ -34,7 +34,7 @@ CONFIG = {
     "num_workers": 2, "seed": 42, "use_precomputed": True,
     "log_every": 50, "val_every": 1000, "save_every": 5000,
     "gen_steps": 50, "gen_temperature": 1.0, "gen_num_mols": 4, "cfg_scale": 3.0,
-    "pretrained_checkpoint": str(ROOT / "checkpoints" / "best_model.pt"),
+    "pretrained_checkpoint": str(ROOT / "checkpoints" / "best_model_expanded.pt"),
     "data_dir": str(ROOT / "data"),
     "checkpoint_dir": str(ROOT / "checkpoints"),
     "wandb_project": "morpheus-text-finetune",
