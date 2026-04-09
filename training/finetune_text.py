@@ -26,7 +26,7 @@ CONFIG = {
     "dropout": 0.15,
     "text_model": "allenai/scibert_scivocab_uncased",
     "max_text_len": 256, "uncond_prob": 0.2,
-    "batch_size": 1024, "gradient_accumulation": 1,
+    "batch_size": 256, "gradient_accumulation": 4,
     "new_lr": 2e-4, "pretrained_lr": 9e-6,
     "weight_decay": 0.07, "max_grad_norm": 1.1,
     "num_epochs": 4200, "warmup_steps": 8800,
