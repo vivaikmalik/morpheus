@@ -33,7 +33,7 @@ CONFIG = {
     "num_layers"  : 8,
     "max_length"  : 74,
     "dropout"     : 0.1,
-    "text_model"  : "BAAI/bge-large-en-v1.5",
+    "text_model"  : "allenai/scibert_scivocab_uncased",
     "uncond_prob" : 0.1,
 
     "batch_size"           : 256,

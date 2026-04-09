@@ -19,7 +19,7 @@ class MolecularDiffusionModel(nn.Module):
         num_layers,
         max_length,
         pad_token_id,
-        text_model_name="BAAI/bge-large-en-v1.5",
+        text_model_name="allenai/scibert_scivocab_uncased",
         uncond_prob=0.1,
         dropout=0.1,
     ):

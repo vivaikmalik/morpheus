@@ -26,7 +26,7 @@ from tokenizer.chemicalTokenizer import ChemicalTokenizer
 # =============================================================================
 
 def load_model(checkpoint_path, tokenizer, device,
-               text_model_name="BAAI/bge-large-en-v1.5"):
+               text_model_name="allenai/scibert_scivocab_uncased"):
     """Load a text-conditioned diffusion model from a checkpoint file."""
     print(f"Loading checkpoint: {checkpoint_path.name}")
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
