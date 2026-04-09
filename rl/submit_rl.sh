@@ -59,7 +59,7 @@ ALGORITHM=${1:-reinforce}
 # ─── Run ──────────────────────────────────────────────────────────────────────
 python rl/train_prompt_adherence.py \
     --algorithm  $ALGORITHM \
-    --wandb_artifact marl-project/morpheus-contrastive/contrastive_scibert_molinst:v0 \
+    --wandb_artifact marl-project/morpheus-contrastive/chebi20_27M_scibert_20ep_contrastive:v0 \
     --data_path  train.csv \
     --num_steps  500 \
     --batch_size 16 \
@@ -81,5 +81,5 @@ python rl/train_prompt_adherence.py \
     --ppo_epochs 4 \
     --clip_eps   0.2 \
     --wandb_project morpheus-rl \
-    --wandb_artifact_text_encoder marl-project/morpheus-contrastive/contrastive_text_encoder:v0 \
+    --wandb_artifact_text_encoder marl-project/morpheus-contrastive/contrastive_scibert_chembl:latest \
     --chebi20_eval

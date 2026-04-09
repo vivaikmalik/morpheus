@@ -23,8 +23,20 @@ from tokenizer.chemicalTokenizer import ChemicalTokenizer
 # =============================================================================
 
 def load_model(checkpoint_path, tokenizer, device,
-               text_model_name="BAAI/bge-large-en-v1.5"):
-    """Load a text-conditioned diffusion model from a checkpoint file."""
+               text_model_name="BAAI/bge-large-en-v1.5",
+               text_encoder=None):
+    """Load a text-conditioned diffusion model from a checkpoint file.
+
+    Args:
+        text_encoder: Optional pre-loaded text encoder (e.g. contrastive
+            scibert with learned weights).  When provided:
+            1. ``set_text_encoder`` is called to register ``encoder_proj``
+            2. ``load_state_dict`` loads diffusion weights + learned
+               ``encoder_proj`` from the checkpoint
+            3. The contrastive encoder weights are re-applied on top,
+               so the final text_encoder has the artifact's learned weights
+               (not the diffusion checkpoint's copy).
+    """
     print(f"Loading checkpoint: {checkpoint_path.name}")
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     config = checkpoint["config"]
@@ -45,7 +57,17 @@ def load_model(checkpoint_path, tokenizer, device,
         dropout=0.0,
     ).to(device)
 
+    if text_encoder is not None:
+        # Register encoder_proj so checkpoint keys load correctly
+        model.set_text_encoder(text_encoder)
+
     model.load_state_dict(checkpoint["model"], strict=False)
+
+    if text_encoder is not None:
+        # Re-apply contrastive encoder weights (load_state_dict overwrote
+        # text_encoder.* with the diffusion checkpoint's copy)
+        model.text_encoder.load_state_dict(text_encoder.state_dict(), strict=True)
+        print(f"  Re-applied contrastive text encoder weights")
 
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
