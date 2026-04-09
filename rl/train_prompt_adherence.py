@@ -364,6 +364,10 @@ def main():
                         help="Download checkpoint from a wandb artifact instead of --checkpoint. "
                              "Format: 'entity/project/artifact_name:version' "
                              "e.g. 'myteam/morpheus-rl/rl-reinforce_v1-final:latest'")
+    parser.add_argument("--wandb_artifact_text_encoder", type=str, default=None,
+                        help="Download text encoder from a wandb artifact. "
+                             "The artifact should contain a HF model directory. "
+                             "Overrides --text_model when provided.")
 
     # Final ChEBI-20 evaluation
     parser.add_argument("--chebi20_eval", action="store_true", default=True,
@@ -419,6 +423,21 @@ def main():
         print(f"  Downloaded → {checkpoint_path}")
     else:
         checkpoint_path = ROOT / args.checkpoint
+
+    # ── Text encoder: wandb artifact or HF hub ─────────────────────────
+    if args.wandb_artifact_text_encoder:
+        print(f"Downloading text encoder artifact: {args.wandb_artifact_text_encoder}")
+        api = wandb.Api() if not args.wandb_artifact else api  # reuse if already created
+        te_artifact = api.artifact(args.wandb_artifact_text_encoder, type="model")
+        import os as _os
+        _te_root = (
+            _os.environ.get("SLURM_TMPDIR")
+            or _os.environ.get("SCRATCH")
+            or str(checkpoint_dir / "_artifacts")
+        )
+        te_dir = str(Path(te_artifact.download(root=_te_root)))
+        args.text_model = te_dir
+        print(f"  Text encoder → {te_dir}")
 
     # ── Device ────────────────────────────────────────────────────────
     device = torch.device(

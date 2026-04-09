@@ -81,4 +81,5 @@ python rl/train_prompt_adherence.py \
     --ppo_epochs 4 \
     --clip_eps   0.2 \
     --wandb_project morpheus-rl \
+    --wandb_artifact_text_encoder marl-project/morpheus-contrastive/contrastive_text_encoder:v0 \
     --chebi20_eval
