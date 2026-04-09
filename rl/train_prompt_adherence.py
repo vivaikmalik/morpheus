@@ -457,25 +457,30 @@ def main():
         raise ValueError("CSV must have 'prompt' and 'response' columns.")
     print(f"Dataset: {len(df):,} rows from {args.data_path}")
 
-    # ── Resolve text model name from contrastive checkpoint if provided ─
+    # ── Resolve contrastive text model name (for tokenizer only) ────────
+    # The diffusion checkpoint was trained with the default text model (e.g. BGE-1024),
+    # so load_model must use that to match text_proj dims.  The contrastive encoder
+    # (e.g. scibert-768) is swapped in afterwards via set_text_encoder, which creates
+    # encoder_proj (768→1024) to bridge the dimension gap.
+    contrastive_text_model = None
     if text_encoder_ckpt is not None:
         _te_ckpt = torch.load(text_encoder_ckpt, map_location="cpu", weights_only=False)
-        _te_text_model = _te_ckpt.get("config", {}).get("text_model")
-        if _te_text_model:
-            print(f"  Text model from contrastive checkpoint: {_te_text_model} (overrides --text_model={args.text_model})")
-            args.text_model = _te_text_model
+        contrastive_text_model = _te_ckpt.get("config", {}).get("text_model")
+        if contrastive_text_model:
+            print(f"  Contrastive text model: {contrastive_text_model}")
         del _te_ckpt
 
     # ── Tokenizers ────────────────────────────────────────────────────
     tokenizer = ChemicalTokenizer(str(ROOT / "chemical_tokenizer.json"))
-    hf_tokenizer = AutoTokenizer.from_pretrained(args.text_model)
+    # Use the contrastive encoder's tokenizer when swapping encoders
+    hf_tokenizer = AutoTokenizer.from_pretrained(contrastive_text_model or args.text_model)
 
     # ── Policy model ──────────────────────────────────────────────────
     print("\n--- Policy model ---")
     model, model_config = load_model(
         checkpoint_path, tokenizer, device, args.text_model
     )
-    # Swap in contrastive text encoder if provided (before training starts)
+    # Swap in contrastive text encoder after loading (set_text_encoder handles dim mismatch)
     if text_encoder_ckpt is not None:
         from finetune.train_chebi20 import _load_contrastive_text_encoder
         contrastive_encoder = _load_contrastive_text_encoder(text_encoder_ckpt, device)
