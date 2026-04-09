@@ -28,14 +28,12 @@ def load_model(checkpoint_path, tokenizer, device,
     """Load a text-conditioned diffusion model from a checkpoint file.
 
     Args:
-        text_encoder: Optional pre-loaded text encoder (e.g. contrastive
-            scibert with learned weights).  When provided:
-            1. ``set_text_encoder`` is called to register ``encoder_proj``
-            2. ``load_state_dict`` loads diffusion weights + learned
-               ``encoder_proj`` from the checkpoint
-            3. The contrastive encoder weights are re-applied on top,
-               so the final text_encoder has the artifact's learned weights
-               (not the diffusion checkpoint's copy).
+        text_encoder: Fallback text encoder (e.g. contrastive scibert).
+            ``set_text_encoder`` is called before ``load_state_dict`` to
+            register ``encoder_proj``.  If the diffusion checkpoint already
+            contains ``encoder_proj`` + ``text_encoder`` weights they are
+            loaded from it; otherwise the fallback encoder's weights are
+            kept.
     """
     print(f"Loading checkpoint: {checkpoint_path.name}")
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
@@ -58,16 +56,20 @@ def load_model(checkpoint_path, tokenizer, device,
     ).to(device)
 
     if text_encoder is not None:
-        # Register encoder_proj so checkpoint keys load correctly
         model.set_text_encoder(text_encoder)
 
-    model.load_state_dict(checkpoint["model"], strict=False)
+    missing, _ = model.load_state_dict(checkpoint["model"], strict=False)
 
+    # If the diffusion checkpoint had encoder_proj + text_encoder weights,
+    # they're already loaded.  Otherwise the fallback encoder weights are kept.
     if text_encoder is not None:
-        # Re-apply contrastive encoder weights (load_state_dict overwrote
-        # text_encoder.* with the diffusion checkpoint's copy)
-        model.text_encoder.load_state_dict(text_encoder.state_dict(), strict=True)
-        print(f"  Re-applied contrastive text encoder weights")
+        has_encoder = not any(k.startswith("text_encoder.") for k in missing)
+        has_proj = not any(k.startswith("encoder_proj.") for k in missing)
+        if has_encoder and has_proj:
+            print(f"  Text encoder + encoder_proj loaded from diffusion checkpoint")
+        else:
+            print(f"  Using fallback contrastive text encoder"
+                  f" (missing from checkpoint: encoder={not has_encoder}, proj={not has_proj})")
 
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
