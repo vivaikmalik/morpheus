@@ -436,6 +436,7 @@ def main():
             or _os.environ.get("SCRATCH")
             or str(checkpoint_dir / "_artifacts")
         )
+        _te_root = str(Path(_te_root) / "text_encoder")
         te_dir = Path(te_artifact.download(root=_te_root))
         pt_files = list(te_dir.glob("*.pt"))
         if not pt_files:
