@@ -3,6 +3,8 @@ Shared utilities for RL post-training: model loading, molecule decoding,
 and reference log-probability computation.
 """
 
+import glob as _glob
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +12,7 @@ import torch
 import torch.nn.functional as F
 import selfies as sf
 from rdkit import Chem
+from transformers import AutoModel
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -51,6 +54,72 @@ def load_model(checkpoint_path, tokenizer, device,
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"  Parameters: {total:,} total | {trainable:,} trainable")
     return model, config
+
+
+def load_text_encoder_from_artifact(artifact_path, text_model_name, device):
+    """
+    Download a contrastive wandb artifact and extract its text encoder weights.
+
+    The contrastive checkpoint is expected to have a ``model_state`` key whose
+    entries are prefixed with ``text_model.`` (as saved by ContrastiveAligner).
+
+    Parameters
+    ----------
+    artifact_path : str
+        Full wandb artifact path, e.g.
+        ``'entity/project/artifact_name:version'``.
+    text_model_name : str
+        HuggingFace model name used to instantiate the encoder architecture
+        (must match the one used during contrastive training).
+    device : torch.device
+
+    Returns
+    -------
+    encoder : AutoModel  (on *device*, eval mode, frozen)
+    """
+    import wandb
+
+    print(f"Downloading text-encoder artifact: {artifact_path}")
+    api = wandb.Api()
+    artifact = api.artifact(artifact_path, type="model")
+
+    _artifact_root = (
+        os.environ.get("SLURM_TMPDIR")
+        or os.environ.get("SCRATCH")
+        or str(ROOT / "checkpoints" / "_artifacts_text_enc")
+    )
+    artifact_dir = Path(artifact.download(root=_artifact_root))
+    pt_files = sorted(_glob.glob(str(artifact_dir / "**" / "*.pt"), recursive=True))
+    if not pt_files:
+        raise FileNotFoundError(
+            f"No .pt file found in text-encoder artifact {artifact_path}"
+        )
+    ckpt_path = pt_files[0]
+    print(f"  Downloaded → {ckpt_path}")
+
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    text_state = {
+        k[len("text_model."):]: v
+        for k, v in ckpt["model_state"].items()
+        if k.startswith("text_model.")
+    }
+    if not text_state:
+        raise ValueError(
+            f"No 'text_model.*' keys found in contrastive checkpoint {ckpt_path}. "
+            "Expected a ContrastiveAligner checkpoint."
+        )
+
+    encoder = AutoModel.from_pretrained(text_model_name)
+    encoder.load_state_dict(text_state, strict=True)
+    encoder = encoder.to(device)
+    encoder.eval()
+    for p in encoder.parameters():
+        p.requires_grad_(False)
+
+    epoch = ckpt.get("epoch", "?")
+    val_loss = ckpt.get("best_val_loss", float("nan"))
+    print(f"  Contrastive text encoder loaded (epoch={epoch}, val_loss={val_loss:.4f})")
+    return encoder
 
 
 # =============================================================================

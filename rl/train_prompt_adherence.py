@@ -50,7 +50,7 @@ from transformers import AutoTokenizer
 from rl.algorithms import get_algorithm, list_algorithms
 from rl.generation import generate_batch_cfg_with_log_probs, generate_batch_cfg_no_grad
 from rl.rewards import compute_rewards
-from rl.utils import load_model, compute_ref_log_probs
+from rl.utils import load_model, compute_ref_log_probs, load_text_encoder_from_artifact
 from rl.evaluation import run_chebi20_eval, print_chebi20_metrics
 
 
@@ -311,6 +311,9 @@ def main():
     # Model / data
     parser.add_argument("--checkpoint", default="checkpoints/best_finetuned_model.pt")
     parser.add_argument("--data_path", default="train.csv")
+    parser.add_argument("--test_data_path", type=str, default=None,
+                        help="Path to a held-out test CSV (same format as --data_path). "
+                             "Used for periodic evaluation instead of training data when provided.")
     parser.add_argument("--text_model", default="BAAI/bge-large-en-v1.5")
 
     # Training
@@ -364,6 +367,12 @@ def main():
                         help="Download checkpoint from a wandb artifact instead of --checkpoint. "
                              "Format: 'entity/project/artifact_name:version' "
                              "e.g. 'myteam/morpheus-rl/rl-reinforce_v1-final:latest'")
+    parser.add_argument("--text_encoder_artifact", type=str, default=None,
+                        help="Wandb artifact path for a ContrastiveAligner checkpoint whose "
+                             "text_model weights will be loaded into both the policy and "
+                             "reference model text encoders (frozen). "
+                             "Format: 'entity/project/artifact_name:version' "
+                             "e.g. 'marl-project/morpheus-contrastive/contrastive_scibert_molinst:v0'")
 
     # Final ChEBI-20 evaluation
     parser.add_argument("--chebi20_eval", action="store_true", default=True,
@@ -432,7 +441,16 @@ def main():
     df = pd.read_csv(args.data_path)
     if "response" not in df.columns or "prompt" not in df.columns:
         raise ValueError("CSV must have 'prompt' and 'response' columns.")
-    print(f"Dataset: {len(df):,} rows from {args.data_path}")
+    print(f"Train dataset: {len(df):,} rows from {args.data_path}")
+
+    if args.test_data_path:
+        eval_df = pd.read_csv(args.test_data_path)
+        if "response" not in eval_df.columns or "prompt" not in eval_df.columns:
+            raise ValueError("Test CSV must have 'prompt' and 'response' columns.")
+        print(f"Test dataset:  {len(eval_df):,} rows from {args.test_data_path}")
+    else:
+        eval_df = df
+        print("No --test_data_path provided; periodic eval will sample from training data.")
 
     # ── Tokenizers ────────────────────────────────────────────────────
     tokenizer = ChemicalTokenizer(str(ROOT / "chemical_tokenizer.json"))
@@ -453,6 +471,18 @@ def main():
     ref_model.eval()
     for param in ref_model.parameters():
         param.requires_grad_(False)
+
+    # ── Text encoder from contrastive artifact (optional) ─────────────
+    if args.text_encoder_artifact:
+        resolved_text_model = model_config.get("text_model", args.text_model)
+        print(f"\n--- Loading text encoder from contrastive artifact ---")
+        text_encoder = load_text_encoder_from_artifact(
+            args.text_encoder_artifact, resolved_text_model, device
+        )
+        # Replace in both policy and reference models (keep frozen in both)
+        model.text_encoder = text_encoder
+        ref_model.text_encoder = text_encoder  # shared read-only weights
+        print("  Text encoder replaced in policy and reference models.")
 
     # ── Optimiser ─────────────────────────────────────────────────────
     trainable_params = [p for p in model.parameters() if p.requires_grad]
@@ -484,6 +514,8 @@ def main():
         "trainable_params": sum(p.numel() for p in trainable_params),
         "total_params": sum(p.numel() for p in model.parameters()),
         "model_config": model_config,
+        "text_encoder_artifact": args.text_encoder_artifact,
+        "test_data_path": args.test_data_path,
     }
 
     if not args.no_wandb:
@@ -600,7 +632,7 @@ def main():
             print(f"  Full evaluation @ step {step}")
             m = full_eval(
                 model, hf_tokenizer, tokenizer, device, model_config,
-                df, batch_size=args.batch_size,
+                eval_df, batch_size=args.batch_size,
                 num_steps=args.eval_gen_steps, temperature=args.temperature,
                 cfg_scale=args.cfg_scale,
                 w_tanimoto=args.w_tanimoto, w_bleu2=args.w_bleu2,
