@@ -314,7 +314,7 @@ def main():
     parser.add_argument("--test_data_path", type=str, default=None,
                         help="Path to a held-out test CSV (same format as --data_path). "
                              "Used for periodic evaluation instead of training data when provided.")
-    parser.add_argument("--text_model", default="BAAI/bge-large-en-v1.5")
+    parser.add_argument("--text_model", default="allenai/scibert_scivocab_uncased")
 
     # Training
     parser.add_argument("--num_steps", type=int, default=500)
