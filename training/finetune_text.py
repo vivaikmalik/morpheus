@@ -229,6 +229,7 @@ def train(args):
         uncond_prob=CONFIG["uncond_prob"], dropout=CONFIG["dropout"],
         load_text_encoder=not use_precomputed).to(device)
     load_pretrained(model, args.checkpoint, device)
+    model = torch.compile(model)
     ema = EMA(model, decay=CONFIG["ema_decay"])
     print(f"  EMA initialized (decay={CONFIG['ema_decay']}, {len(ema.shadow)} tensors)")
     acc_steps = CONFIG["gradient_accumulation"]
