@@ -43,6 +43,16 @@ def load_model(checkpoint_path, tokenizer, device,
     if resolved_text_model != text_model_name:
         print(f"  Text model from checkpoint: {resolved_text_model} (overrides CLI default)")
 
+    if text_encoder is not None:
+        # Build the model with the default BGE architecture so text_proj
+        # dimensions (1024 input) match the checkpoint, then swap the
+        # encoder afterwards.  set_text_encoder will create encoder_proj
+        # to bridge the dimension gap (e.g. scibert 768 → 1024).
+        init_text_model = text_model_name  # BGE default
+        print(f"  Initialising with {init_text_model} (will swap text encoder after)")
+    else:
+        init_text_model = resolved_text_model
+
     model = MolecularDiffusionModel(
         vocab_size=config["vocab_size"],
         hidden_size=config["hidden_size"],
@@ -51,7 +61,7 @@ def load_model(checkpoint_path, tokenizer, device,
         num_layers=config["num_layers"],
         max_length=config["max_length"],
         pad_token_id=tokenizer.pad_token_id,
-        text_model_name=resolved_text_model,
+        text_model_name=init_text_model,
         dropout=0.0,
     ).to(device)
 
