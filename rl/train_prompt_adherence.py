@@ -425,6 +425,7 @@ def main():
         checkpoint_path = ROOT / args.checkpoint
 
     # ── Text encoder: wandb artifact or HF hub ─────────────────────────
+    text_encoder_ckpt = None  # path to contrastive .pt checkpoint (if any)
     if args.wandb_artifact_text_encoder:
         print(f"Downloading text encoder artifact: {args.wandb_artifact_text_encoder}")
         api = wandb.Api() if not args.wandb_artifact else api  # reuse if already created
@@ -435,9 +436,12 @@ def main():
             or _os.environ.get("SCRATCH")
             or str(checkpoint_dir / "_artifacts")
         )
-        te_dir = str(Path(te_artifact.download(root=_te_root)))
-        args.text_model = te_dir
-        print(f"  Text encoder → {te_dir}")
+        te_dir = Path(te_artifact.download(root=_te_root))
+        pt_files = list(te_dir.glob("*.pt"))
+        if not pt_files:
+            raise FileNotFoundError(f"No .pt file found in text encoder artifact {args.wandb_artifact_text_encoder}")
+        text_encoder_ckpt = pt_files[0]
+        print(f"  Text encoder checkpoint → {text_encoder_ckpt}")
 
     # ── Device ────────────────────────────────────────────────────────
     device = torch.device(
@@ -453,6 +457,15 @@ def main():
         raise ValueError("CSV must have 'prompt' and 'response' columns.")
     print(f"Dataset: {len(df):,} rows from {args.data_path}")
 
+    # ── Resolve text model name from contrastive checkpoint if provided ─
+    if text_encoder_ckpt is not None:
+        _te_ckpt = torch.load(text_encoder_ckpt, map_location="cpu", weights_only=False)
+        _te_text_model = _te_ckpt.get("config", {}).get("text_model")
+        if _te_text_model:
+            print(f"  Text model from contrastive checkpoint: {_te_text_model} (overrides --text_model={args.text_model})")
+            args.text_model = _te_text_model
+        del _te_ckpt
+
     # ── Tokenizers ────────────────────────────────────────────────────
     tokenizer = ChemicalTokenizer(str(ROOT / "chemical_tokenizer.json"))
     hf_tokenizer = AutoTokenizer.from_pretrained(args.text_model)
@@ -462,6 +475,11 @@ def main():
     model, model_config = load_model(
         checkpoint_path, tokenizer, device, args.text_model
     )
+    # Swap in contrastive text encoder if provided (before training starts)
+    if text_encoder_ckpt is not None:
+        from finetune.train_chebi20 import _load_contrastive_text_encoder
+        contrastive_encoder = _load_contrastive_text_encoder(text_encoder_ckpt, device)
+        model.set_text_encoder(contrastive_encoder)
     model.train()
 
     # ── Reference model (frozen) ──────────────────────────────────────
@@ -469,6 +487,9 @@ def main():
     ref_model, _ = load_model(
         checkpoint_path, tokenizer, device, args.text_model
     )
+    if text_encoder_ckpt is not None:
+        ref_encoder = _load_contrastive_text_encoder(text_encoder_ckpt, device)
+        ref_model.set_text_encoder(ref_encoder)
     ref_model.eval()
     for param in ref_model.parameters():
         param.requires_grad_(False)
