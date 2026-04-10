@@ -43,7 +43,7 @@ def smiles_to_selfies(smiles):
         return None
 
 
-def fits_tokenizer(selfies_str, tokenizer, max_length=259):
+def fits_tokenizer(selfies_str, tokenizer, max_length=74):
     """
     Check if every token in the SELFIES string exists in our vocabulary
     and the sequence fits within max_length (including EOS).
