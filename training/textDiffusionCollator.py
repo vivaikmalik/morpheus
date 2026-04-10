@@ -17,7 +17,7 @@ class TextDiffusionCollator:
     use_precomputed : bool, if True, expects scibert_states in features
     """
     def __init__(self, mol_tokenizer, text_tokenizer=None,
-                 max_text_len=256, use_precomputed=False):
+                 max_text_len=74, use_precomputed=False):
         self.mol_tokenizer  = mol_tokenizer
         self.text_tokenizer = text_tokenizer
         self.max_text_len   = max_text_len

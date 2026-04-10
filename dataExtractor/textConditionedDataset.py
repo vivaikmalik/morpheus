@@ -18,7 +18,7 @@ class TextConditionedDataset(Dataset):
     scibert_states : dict or None, pre-computed SciBERT hidden states
                      keyed by DataFrame row index → {states, mask}
     """
-    def __init__(self, df, tokenizer, max_length=256, scibert_states=None):
+    def __init__(self, df, tokenizer, max_length=74, scibert_states=None):
         self.tokenizer  = tokenizer
         self.max_length = max_length
         self.selfies    = df["selfies"].tolist()
