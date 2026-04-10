@@ -119,7 +119,7 @@ def process_split(df, tokenizer, max_length, split_name):
 def main():
     # Load tokenizer
     tokenizer = ChemicalTokenizer(str(ROOT / "chemical_tokenizer.json"))
-    max_length = 259
+    max_length = 77
 
     print(f"Tokenizer vocab size: {tokenizer.vocab_size}")
     print(f"Max sequence length:  {max_length}")
