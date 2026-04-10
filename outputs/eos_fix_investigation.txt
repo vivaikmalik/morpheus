@@ -1,0 +1,62 @@
+================================================================
+  EOS Fix Investigation -- Morpheus Project
+  Generated: 2026-04-09
+================================================================
+
+QUESTION
+--------
+Was chebi20_eval.csv generated before or after the EOS fix commit?
+Is the pre_eos_fix=True flag in summary_all_runs.csv correct?
+
+GIT TIMELINE (newest to oldest)
+-------------------------------
+c8c8574  Project cleanup: consistent checkpoint naming, symlinks, etc.
+         -> chebi20_eval.csv was LAST TOUCHED here (moved/renamed)
+96f65b5  Fix critical EOS bug: append EOS token before padding in all dataset classes
+         Date: Sat Apr 4 19:22:15 2026
+         Files changed: finetune/conditionalSELFIESDataset.py,
+                        dataExtractor/conditionalSELFIESDataset.py,
+                        finetune/train_chebi20.py,
+                        inference/evaluate_prompted.py,
+                        kaggle_eos_fix.py, kaggle_full_finetune.py
+f422aa1  Add upscaled 27M model pipeline: pretraining, text conditioning, ChEBI-20, evaluation
+         -> chebi20_eval.csv was FIRST COMMITTED here
+
+CONCLUSION
+----------
+chebi20_eval.csv content was generated in commit f422aa1, which is
+OLDER than the EOS fix commit (96f65b5). The file was only moved/
+reorganized in c8c8574 (project cleanup), not regenerated.
+
+Therefore: pre_eos_fix=True in summary_all_runs.csv is CORRECT.
+The evaluation was run with chebi20_27M_frozen.pt, which was trained
+BEFORE the EOS fix, meaning EOS tokens never appeared in training
+sequences (eos_weight=5.0 was a no-op).
+
+WHAT THE EOS BUG MEANS
+-----------------------
+The EOS token (id=2) was never appended to training sequences.
+- Generated sequences had no learned stopping criterion
+- Models tended to produce sequences close to max_length=74 tokens
+- "Length overflow problem": avg ~74 tokens vs expected ~43 for ChEBI-20
+
+The EOS fix (commit 96f65b5):
+- Appends EOS token before padding in all dataset classes
+- All models trained after this commit (chebi20_27M_scibert_*.pt)
+  have proper EOS termination
+- The best model (chebi20_27M_scibert_20ep_contrastive.pt, epoch 18)
+  was trained WITH the EOS fix
+
+BASELINE DISCREPANCY NOTE
+--------------------------
+Comparing pre-fix vs post-fix evaluations:
+  chebi20_eval.csv (pre-fix model):     Morgan=0.159, MACCS=0.589
+  chebi20_eval_eost.csv (EOS-truncated): Morgan=0.152, MACCS=0.577
+  -> EOS truncation at inference did NOT recover performance
+  -> The fix was needed during TRAINING, not post-hoc at inference
+
+Best post-fix model (27M_scibert_20ep, s=50):
+  Morgan=0.2993, MACCS=0.6420, BLEU-2=0.6227, Lev Sim=0.5215
+  -> 88% relative improvement in Morgan over pre-fix BGE frozen model
+
+================================================================
