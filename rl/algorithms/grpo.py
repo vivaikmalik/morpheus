@@ -74,8 +74,10 @@ class GRPO(RLAlgorithm):
         # Reshape to (num_groups, G) for within-group normalisation
         rewards_grouped = rewards.view(-1, G)
         group_mean = rewards_grouped.mean(dim=1, keepdim=True)
-        group_std = rewards_grouped.std(dim=1, keepdim=True).clamp(min=1e-8)
-        advantage = ((rewards_grouped - group_mean) / group_std).view(B)
+        # Avoid dividing by group_std. With small G=4, group_std can be tiny by chance
+        # and cause massive, destructive gradient explosions. 
+        # DeepSeekMath GRPO often omits std division for safety, or uses it only with huge G.
+        advantage = (rewards_grouped - group_mean).view(B)
 
         # ── Clipped importance ratio ─────────────────────────────────
         ratio = torch.exp(policy_log_probs - self._old_log_probs)
