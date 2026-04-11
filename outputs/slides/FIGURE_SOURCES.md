@@ -226,7 +226,11 @@ Footer: training hardware comparison (MacBook M2 vs research GPU cluster).
 
 ---
 
-## fig_comparison_three_panel — **CURRENT VERSION** (Slide 12)
+## fig_comparison_three_panel — **SUPERSEDED** (split into three separate figures)
+
+Replaced by fig_compare_params, fig_compare_validity, fig_compare_performance.
+
+~~## fig_comparison_three_panel — CURRENT VERSION (Slide 12)~~
 
 **Type:** Three-panel figure (vertical bars | horizontal bars | grouped vertical bars)
 **Slide:** 12 — Main comparison vs TGM-DLM
@@ -257,3 +261,49 @@ Morgan not included in this figure (preliminary presentation leads with stronges
 ### Panel 3: MACCS & atom-BLEU-2
 - Morpheus reaches 76% of TGM-DLM on MACCS, 75% on atom-BLEU-2
 - At 15% of parameter count
+
+
+---
+
+## fig_compare_params (Slide 12) — CURRENT
+
+**Type:** Vertical bar chart
+**Slide:** 12, panel 1
+**Numbers verified:** Gong et al. AAAI 2024 (abstract / model description)
+
+| System | Parameters |
+|--------|-----------|
+| Morpheus | 27M (trainable) |
+| TGM-DLM | ~180M |
+
+Annotation: "6.7x smaller" (lowercase x)
+
+---
+
+## fig_compare_validity (Slide 12) — CURRENT
+
+**Type:** Horizontal bar chart
+**Slide:** 12, panel 2
+**Numbers verified:** Gong et al. AAAI 2024, Table 1 (with correction phase)
+
+| System | Validity |
+|--------|---------|
+| Morpheus | 100% (SELFIES construction, no correction) |
+| TGM-DLM | 87.1% (with their separate correction network) |
+
+Note: TGM-DLM raw validity (without correction) is 78.9% per paper. Not shown here.
+
+---
+
+## fig_compare_performance (Slide 12) — CURRENT
+
+**Type:** Grouped vertical bar chart
+**Slide:** 12, panel 3
+**Numbers verified:** Gong et al. AAAI 2024, Table 1; Morpheus eval CSV
+
+| Metric | Morpheus 27M | TGM-DLM ~180M | % of TGM-DLM |
+|--------|-------------|---------------|-------------|
+| MACCS FTS | 0.651 | 0.854 | 76% |
+| atom-BLEU-2 | 0.621 | 0.826 | 75% |
+
+Morgan not included (preliminary presentation leads with strongest claims).
