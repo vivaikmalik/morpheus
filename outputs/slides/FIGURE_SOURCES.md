@@ -129,3 +129,55 @@ Post-fix: chebi20_27M_frozen (cfg=2.0, temp=0.6, steps=50)
 | BGE contrastive | 0.239 | 0.589 | 0.515 |
 | SciBERT 10ep | 0.251 | 0.599 | 0.554 |
 | SciBERT 20ep | 0.299 | 0.642 | 0.604 |
+
+
+---
+
+## fig_rl_results — **DEPRECATED** (superseded by fig_rl_progression)
+
+Original RL figure with dual QED/MW subplots. Retired because the framing
+of QED-only as "reward hacking" was overclaimed (MW 295→293 is noise).
+File kept for reference, not used in slides.
+
+---
+
+## fig_scaling — **DEPRECATED** (superseded by fig_comparison_bars)
+
+Log-scale scatter plot. Replaced by direct grouped bar comparison which
+communicates the performance gap more clearly.
+File kept for reference, not used in slides.
+
+---
+
+## fig_rl_progression (Slide 8 — replaces fig_rl_results)
+
+**Type:** Dual subplot — QED bars + grouped diversity bars
+**Slide:** 8 — RL fine-tuning results
+**Source data:** `outputs/results_summary.csv`
+
+Story: RL steadily improves QED (+12.8%); adding MW and diversity constraints
+maintains structural variety rather than collapsing to a narrow distribution.
+
+| Config | QED | Uniqueness % | Scaffold Div % |
+|--------|-----|-------------|----------------|
+| Base (no RL) | 0.742 | 100.0 | 95.4 |
+| QED only | 0.799 | 98.8 | 88.6 |
+| QED + MW | 0.818 | 91.2 | 95.2 |
+| QED + MW + Div | 0.837 | 93.4 | 94.0 |
+
+---
+
+## fig_comparison_bars (Slide 12 — replaces fig_scaling)
+
+**Type:** Grouped bar chart (3 metrics × 3 systems)
+**Slide:** 12 — Architecture comparison
+**Source data:** `outputs/summary_all_runs.csv` + teammate 150M numbers (pending)
+
+| System | Morgan | MACCS | Atom BLEU-2 |
+|--------|--------|-------|-------------|
+| Morpheus 27M | 0.310 | 0.651 | 0.621 |
+| Morpheus 150M | 0.463 | 0.699 | — (pending) |
+| TGM-DLM ~180M | 0.688 | 0.854 | 0.826 |
+
+Note: 150M Atom BLEU-2 missing — shown as blank bar with "—" annotation.
+TGM-DLM reference: AAAI 2024 reported numbers.
