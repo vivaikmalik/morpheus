@@ -307,3 +307,22 @@ Note: TGM-DLM raw validity (without correction) is 78.9% per paper. Not shown he
 | atom-BLEU-2 | 0.621 | 0.826 | 75% |
 
 Morgan not included (preliminary presentation leads with strongest claims).
+
+
+---
+
+## fig_compare_rdk (Slide 12, supplementary)
+
+**Type:** Vertical bar chart
+**Slide:** 12 supplementary (or appendix)
+**Numbers verified:** Morpheus eval CSV; Gong et al. AAAI 2024, Table 1
+
+Supplementary to fig_compare_performance, showing RDK fingerprint metric separately.
+
+| System | RDK FTS | % of TGM-DLM |
+|--------|---------|-------------|
+| Morpheus 27M | 0.418 | 57% |
+| TGM-DLM ~180M | 0.739 | 100% |
+
+Note: RDK fingerprint is a weaker metric for Morpheus relative to MACCS/atom-BLEU-2.
+Not included in main slide 12 comparison (which leads with MACCS and atom-BLEU-2 at 75-76%).
