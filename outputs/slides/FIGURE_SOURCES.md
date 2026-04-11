@@ -167,7 +167,11 @@ maintains structural variety rather than collapsing to a narrow distribution.
 
 ---
 
-## fig_comparison_bars (Slide 12 — replaces fig_scaling)
+## fig_comparison_bars — **DEPRECATED** (superseded by fig_efficiency_comparison)
+
+**Formerly Slide 12.** Replaced by efficiency-focused framing.
+
+~~## fig_comparison_bars (Slide 12 — replaces fig_scaling)~~
 
 **Type:** Grouped bar chart (3 metrics × 3 systems)
 **Slide:** 12 — Architecture comparison
@@ -181,3 +185,38 @@ maintains structural variety rather than collapsing to a narrow distribution.
 
 Note: 150M Atom BLEU-2 missing — shown as blank bar with "—" annotation.
 TGM-DLM reference: AAAI 2024 reported numbers.
+
+
+---
+
+## fig_efficiency_comparison (Slide 12 — replaces fig_comparison_bars)
+
+**Type:** Two-panel figure (grouped bar + dual horizontal bar)
+**Slide:** 12 — Comparison / positioning
+**Source data:** `outputs/summary_all_runs.csv` + TGM-DLM AAAI 2024 reported numbers
+
+### Left panel: Per-Parameter Efficiency
+| Metric | Morpheus 27M (score/M) | TGM-DLM 180M (score/M) | Multiplier |
+|--------|----------------------|----------------------|-----------|
+| Morgan | 0.01148 | 0.00382 | 3.0× |
+| MACCS | 0.02411 | 0.00474 | 5.1× |
+| Atom BLEU-2 | 0.02300 | 0.00459 | 5.0× |
+
+### Right panel upper: % of TGM-DLM score achieved
+| Metric | Morpheus score | TGM-DLM score | % achieved |
+|--------|---------------|---------------|-----------|
+| Morgan | 0.310 | 0.688 | 45.1% |
+| MACCS | 0.651 | 0.854 | 76.2% |
+| Atom BLEU-2 | 0.621 | 0.826 | 75.2% |
+
+### Right panel lower: Validity comparison
+| System | Validity | Notes |
+|--------|---------|-------|
+| Morpheus 27M | 100% | SELFIES guarantee — no correction needed |
+| TGM-DLM (raw) | 87% | Before post-processing correction |
+| TGM-DLM (corrected) | ~100% | Requires separate correction network |
+
+**Visual story:** 3-5× more efficient per parameter; reach 75-76% on MACCS/BLEU at 15% param count;
+100% validity by construction vs 87% raw for TGM-DLM.
+Morgan gap (45%) shown honestly in lighter orange.
+Footer: training hardware comparison (MacBook M2 vs research GPU cluster).
