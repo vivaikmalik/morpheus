@@ -189,7 +189,9 @@ TGM-DLM reference: AAAI 2024 reported numbers.
 
 ---
 
-## fig_efficiency_comparison (Slide 12 — replaces fig_comparison_bars)
+## fig_efficiency_comparison — **SUPERSEDED** by fig_comparison_three_panel
+
+~~## fig_efficiency_comparison (Slide 12 — replaces fig_comparison_bars)~~
 
 **Type:** Two-panel figure (grouped bar + dual horizontal bar)
 **Slide:** 12 — Comparison / positioning
@@ -220,3 +222,38 @@ TGM-DLM reference: AAAI 2024 reported numbers.
 100% validity by construction vs 87% raw for TGM-DLM.
 Morgan gap (45%) shown honestly in lighter orange.
 Footer: training hardware comparison (MacBook M2 vs research GPU cluster).
+
+
+---
+
+## fig_comparison_three_panel — **CURRENT VERSION** (Slide 12)
+
+**Type:** Three-panel figure (vertical bars | horizontal bars | grouped vertical bars)
+**Slide:** 12 — Main comparison vs TGM-DLM
+**Source data:** Morpheus evaluation CSVs + Gong et al. (AAAI 2024), Table 1
+
+Numbers verified from TGM-DLM paper (Gong et al., AAAI 2024):
+
+| Metric | Morpheus 27M | TGM-DLM ~180M | Source |
+|--------|-------------|---------------|--------|
+| Parameters | 27M | ~180M | checkpoints/README.md; paper abstract |
+| Validity | 100% | 87.1% (with correction) | SELFIES property; paper Table 1 |
+| MACCS FTS | 0.651 | 0.854 | eval CSV; paper Table 1 |
+| atom-BLEU-2 | 0.621 | 0.826 | eval CSV; paper Table 1 |
+
+Note: TGM-DLM validity 87.1% is their BEST reported number (WITH correction phase).
+Raw validity without correction is 78.9% — not shown to be fair.
+Morgan not included in this figure (preliminary presentation leads with strongest claims).
+
+### Panel 1: Model size
+- Morpheus 27M (blue) vs TGM-DLM ~180M (orange)
+- Double-headed arrow annotation: "6.7× smaller"
+
+### Panel 2: Validity
+- Morpheus 100% (green, SELFIES guarantee, no correction)
+- TGM-DLM 87.1% (orange, with correction phase)
+- Note below: correction network required by TGM-DLM
+
+### Panel 3: MACCS & atom-BLEU-2
+- Morpheus reaches 76% of TGM-DLM on MACCS, 75% on atom-BLEU-2
+- At 15% of parameter count
