@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 
 MAX_TEXT_LEN = 256
 BATCH_SIZE = 64
-MODEL_NAME = "allenai/scibert_scivocab_uncased"
+MODEL_NAME = "/content/morpheus/scibert_local"
 
 
 def precompute_split(df, tokenizer, model, device, save_path):

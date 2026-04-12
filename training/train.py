@@ -175,7 +175,7 @@ def train():
 
     # --- Load ZINC250k ---
     print("Loading ZINC250k...")
-    df = pd.read_csv("hf://datasets/edmanft/zinc250k/zinc250k_selfies.csv")
+    df = pd.read_csv("/content/morpheus/data/zinc250k_selfies.csv")
     print(f"  Raw: {len(df):,} molecules")
 
     # Filter: must have valid SMILES and fit in max_length
