@@ -26,7 +26,7 @@ CONFIG = {
     "ffn_dim": 4096, "num_layers": 12,
     "max_length": 256,   # CHANGED: 74 → 256
     "dropout": 0.11,
-    "text_model": "allenai/scibert_scivocab_uncased",
+    "text_model": "/content/morpheus/scibert_local",
     "max_text_len": 256, "uncond_prob": 0.2,
     "batch_size": 32, "gradient_accumulation": 2,  # effective=64, less VRAM for 256 seq
     "new_lr": 3e-4, "pretrained_lr": 1e-6,

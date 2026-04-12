@@ -3,14 +3,13 @@ import torch
 import argparse
 import numpy as np
 import pandas as pd
-import selfies as sf
 from pathlib import Path
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors, QED
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tokenizer.chemicalTokenizer import ChemicalTokenizer
+from tokenizer.smilesTokenizer import SmilesTokenizer
 from model.molecularDiffusionModel import MolecularDiffusionModel
 
 # =============================================================================
@@ -18,7 +17,7 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 # =============================================================================
 
 CHECKPOINT_PATH = Path(__file__).parent.parent / "checkpoints" / "best_model.pt"
-TOKENIZER_PATH  = Path(__file__).parent.parent / "chemical_tokenizer.json"
+TOKENIZER_PATH  = Path(__file__).parent.parent / "smiles_vocab.json"
 OUTPUT_PATH     = Path(__file__).parent.parent / "outputs" / "generated_molecules.csv"
 
 GEN_CONFIG = {
@@ -171,10 +170,10 @@ def decode_and_analyze(raw_ids, tokenizer):
     ]
 
     token_count = len(raw_ids)
-    selfies_str = tokenizer.decode(raw_ids)
+    smiles = tokenizer.decode(raw_ids)
 
     result = {
-        "selfies"        : selfies_str,
+        "raw_smiles"        : smiles,
         "token_count"    : token_count,
         "valid"          : False,
         "smiles"         : "",
@@ -196,27 +195,23 @@ def decode_and_analyze(raw_ids, tokenizer):
         return result
 
     try:
-        # --- Decode SELFIES → SMILES ---
-        smiles = sf.decoder(selfies_str)
-        result["smiles"] = smiles
-
-        # --- Validate with RDKit ---
+        # --- Validate with RDKit directly (no SELFIES conversion) ---
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
+            result["smiles"] = smiles
             return result
 
         canonical = Chem.MolToSmiles(mol)
+        result["smiles"] = smiles
         result["canonical_smiles"] = canonical
         result["valid"] = True
 
         # --- Token retention ---
-        # Re-encode the canonical SMILES back to SELFIES
-        # Measures how much of our generated sequence was chemically meaningful
-        re_encoded   = sf.encoder(canonical)
-        reenc_tokens = len(list(sf.split_selfies(re_encoded)))
+        # Re-encode canonical SMILES through tokenizer
+        reenc_tokens = len(tokenizer.encode(canonical))
         result["token_retention"] = round(reenc_tokens / max(token_count, 1), 3)
 
-        # --- Physicochemical properties ---
+        # --- Properties (unchanged) ---
         result["logp"]          = round(Descriptors.MolLogP(mol), 3)
         result["mw"]            = round(Descriptors.MolWt(mol), 2)
         result["heavy_atoms"]   = mol.GetNumHeavyAtoms()
@@ -225,18 +220,13 @@ def decode_and_analyze(raw_ids, tokenizer):
         result["hbd"]           = rdMolDescriptors.CalcNumHBD(mol)
         result["hba"]           = rdMolDescriptors.CalcNumHBA(mol)
         result["rot_bonds"]     = rdMolDescriptors.CalcNumRotatableBonds(mol)
-
-        # --- Drug-likeness ---
-        result["qed"] = round(QED.qed(mol), 3)
-
-        # Lipinski's Rule of Five
+        result["qed"]           = round(QED.qed(mol), 3)
         result["lipinski"] = (
             result["mw"]  <= 500 and
             result["logp"] <= 5   and
             result["hbd"] <= 5   and
             result["hba"] <= 10
         )
-
     except Exception as e:
         result["smiles"] = f"ERROR: {e}"
 
@@ -332,7 +322,7 @@ def main():
           f"| temperature={GEN_CONFIG['temperature']}\n")
 
     # --- Load tokenizer and model ---
-    tokenizer = ChemicalTokenizer(TOKENIZER_PATH)
+    tokenizer = SmilesTokenizer(str(TOKENIZER_PATH))
     checkpoint_path = Path(args.checkpoint)
     model, config = load_model(checkpoint_path, tokenizer, device)
 
