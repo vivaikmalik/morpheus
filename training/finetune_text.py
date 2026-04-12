@@ -1,9 +1,9 @@
 """
-training/finetune_text.py — v3 with EMA + regularization
+training/finetune_text.py — SMILES pipeline with EMA
 """
 
 import sys, copy, argparse, random
-import numpy as np, torch, torch.nn.functional as F, pandas as pd, selfies as sf
+import numpy as np, torch, torch.nn.functional as F, pandas as pd
 from pathlib import Path
 from rdkit import Chem
 from rdkit.Chem import Descriptors
@@ -15,30 +15,33 @@ import wandb
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tokenizer.chemicalTokenizer import ChemicalTokenizer
+from tokenizer.smilesTokenizer import SmilesTokenizer
 from dataExtractor.textConditionedDataset import TextConditionedDataset
 from training.textDiffusionCollator import TextDiffusionCollator
 from model.molecularDiffusionModel import MolecularDiffusionModel
 
 CONFIG = {
-    "vocab_size": 110, "hidden_size": 1024, "num_heads": 16,
-    "ffn_dim": 4096, "num_layers": 12, "max_length": 74,
+    "vocab_size": None,  # set from tokenizer
+    "hidden_size": 1024, "num_heads": 16,
+    "ffn_dim": 4096, "num_layers": 12,
+    "max_length": 256,   # CHANGED: 74 → 256
     "dropout": 0.11,
     "text_model": "allenai/scibert_scivocab_uncased",
-    "max_text_len": 256, "uncond_prob": 0.22,
-    "batch_size": 64, "gradient_accumulation": 1,
-    "new_lr": 5e-4, "pretrained_lr": 1e-5,
-    "weight_decay": 0.07, "max_grad_norm": 1.1,
-    "num_epochs": 222, "warmup_steps": 5555,
-    "ema_decay": 0.999,
+    "max_text_len": 256, "uncond_prob": 0.2,
+    "batch_size": 32, "gradient_accumulation": 2,  # effective=64, less VRAM for 256 seq
+    "new_lr": 3e-4, "pretrained_lr": 1e-6,
+    "weight_decay": 0.01, "max_grad_norm": 2.2,
+    "num_epochs": 200, "warmup_steps": 5000,
+    "ema_decay": 0.9999,
     "num_workers": 2, "seed": 42, "use_precomputed": True,
     "log_every": 50, "val_every": 1000, "save_every": 5000,
-    "gen_steps": 50, "gen_temperature": 1.0, "gen_num_mols": 4, "cfg_scale": 3.0,
+    "gen_steps": 100, "gen_temperature": 1.0, "gen_num_mols": 4, "cfg_scale": 3.0,
     "pretrained_checkpoint": str(ROOT / "checkpoints" / "best_model.pt"),
     "data_dir": str(ROOT / "data"),
     "checkpoint_dir": str(ROOT / "checkpoints"),
     "wandb_project": "morpheus-text-finetune",
 }
+
 
 class EMA:
     def __init__(self, model, decay=0.9999):
@@ -65,8 +68,7 @@ class EMA:
                 param.data.copy_(backup[name])
     def state_dict(self):
         return {k: v.clone() for k, v in self.shadow.items()}
-    def load_state_dict(self, sd):
-        self.shadow = {k: v.clone() for k, v in sd.items()}
+
 
 def diffusion_loss(logits, labels, pad_token_id=0):
     B, seq_len, vocab_size = logits.shape
@@ -76,6 +78,7 @@ def diffusion_loss(logits, labels, pad_token_id=0):
                           weight=vocab_weights, ignore_index=-100, reduction='none')
     valid = (labels.view(-1) != -100).float()
     return (raw * valid).sum() / valid.sum().clamp(min=1e-8)
+
 
 def run_validation(model, ema, val_loader, device, use_precomputed, max_batches=100):
     backup = ema.apply_to(model)
@@ -101,8 +104,9 @@ def run_validation(model, ema, val_loader, device, use_precomputed, max_batches=
     model.train()
     return total_loss / max(total_steps, 1)
 
+
 def generate_with_cfg(model, tokenizer, text_tokenizer, device,
-                      prompts, cfg_scale=3.0, num_steps=50, temperature=1.0):
+                      prompts, cfg_scale=3.0, num_steps=100, temperature=1.0):
     model.eval()
     B = len(prompts)
     max_length = CONFIG["max_length"]
@@ -120,6 +124,7 @@ def generate_with_cfg(model, tokenizer, text_tokenizer, device,
     text_pad = (text_enc["attention_mask"] == 0)
     if model.text_encoder is None:
         del text_encoder; torch.cuda.empty_cache()
+
     input_ids = torch.full((B, max_length), tokenizer.mask_token_id, dtype=torch.long, device=device)
     t_vals = torch.linspace(1.0, 0.0, num_steps, device=device)
     with torch.no_grad():
@@ -142,85 +147,94 @@ def generate_with_cfg(model, tokenizer, text_tokenizer, device,
     model.train()
     return input_ids
 
+
 def generate_and_log(model, ema, tokenizer, text_tokenizer, device, step, val_df=None):
     if val_df is not None and len(val_df) >= CONFIG["gen_num_mols"]:
         sample_df = val_df.sample(n=CONFIG["gen_num_mols"], random_state=step)
-        prompts, gt_selfies = sample_df["description"].tolist(), sample_df["selfies"].tolist()
+        prompts = sample_df["description"].tolist()
+        gt_smiles = sample_df["smiles"].tolist()
     else:
-        prompts = ["The molecule is a member of the class of pyrimidines.",
-                    "The molecule is a primary alcohol with a hydroxyl group.",
+        prompts = ["The molecule is a simple amino acid.",
                     "The molecule contains a benzene ring with a carboxylic acid group.",
-                    "The molecule is a simple amino acid."][:CONFIG["gen_num_mols"]]
-        gt_selfies = [None] * len(prompts)
+                    "The molecule is a primary alcohol with a hydroxyl group.",
+                    "The molecule is a member of the class of pyrimidines."][:CONFIG["gen_num_mols"]]
+        gt_smiles = [None] * len(prompts)
+
     backup = ema.apply_to(model)
     raw_ids = generate_with_cfg(model, tokenizer, text_tokenizer, device,
                                  prompts, cfg_scale=CONFIG["cfg_scale"],
                                  num_steps=CONFIG["gen_steps"], temperature=CONFIG["gen_temperature"])
     ema.restore(model, backup)
-    print(f"\n{'='*70}\n  GENERATED MOLECULES (EMA) — Step {step}\n{'='*70}")
-    valid_count = 0
+
+    print(f"\n{'='*70}\n  GENERATED (EMA) — Step {step}\n{'='*70}")
     for i in range(len(prompts)):
         ids = raw_ids[i].cpu().tolist()
-        if tokenizer.eos_token_id in ids: ids = ids[:ids.index(tokenizer.eos_token_id)]
-        selfies_str = tokenizer.decode(ids)
-        try:
-            smiles = sf.decoder(selfies_str)
-            mol = Chem.MolFromSmiles(smiles)
-            if mol:
-                canonical = Chem.MolToSmiles(mol)
-                valid_count += 1
-                print(f"  [{i}] ✅ LogP={Descriptors.MolLogP(mol):+.2f}  Heavy={mol.GetNumHeavyAtoms():>2}  {canonical[:50]}")
-            else: print(f"  [{i}] ❌ RDKit rejected: {smiles[:50]}")
-        except Exception as e: print(f"  [{i}] ❌ Error: {e}")
-        print(f"       Prompt: {prompts[i][:70]}{'...' if len(prompts[i])>70 else ''}")
-        if gt_selfies[i]:
-            try:
-                gt_mol = Chem.MolFromSmiles(sf.decoder(gt_selfies[i]))
-                if gt_mol: print(f"       GT:     {Chem.MolToSmiles(gt_mol)[:50]}")
-            except: pass
+        if tokenizer.eos_token_id in ids:
+            ids = ids[:ids.index(tokenizer.eos_token_id)]
+        smiles = tokenizer.decode(ids)
+        mol = Chem.MolFromSmiles(smiles)
+        if mol:
+            canonical = Chem.MolToSmiles(mol)
+            print(f"  [{i}] ✅ Heavy={mol.GetNumHeavyAtoms():>2}  {canonical[:55]}")
+        else:
+            print(f"  [{i}] ❌ {smiles[:55]}")
+        print(f"       Prompt: {prompts[i][:70]}")
+        if gt_smiles[i]:
+            print(f"       GT:     {gt_smiles[i][:55]}")
         print()
-    print(f"  Valid: {valid_count}/{len(prompts)}\n{'='*70}\n")
+    print(f"{'='*70}\n")
+
 
 def load_pretrained(model, checkpoint_path, device):
-    print(f"Loading pretrained checkpoint: {checkpoint_path}")
+    print(f"Loading: {checkpoint_path}")
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     missing, unexpected = model.load_state_dict(ckpt["model"], strict=False)
-    print(f"  Trained for {ckpt.get('step','?'):,} steps (epoch {ckpt.get('epoch','?')})")
-    print(f"  Loaded: {len(ckpt['model'])-len(unexpected)}  Missing: {len(missing)}  Unexpected: {len(unexpected)}")
-    cross = [k for k in ckpt["model"] if "cross_attention" in k and k not in unexpected]
-    print(f"  Cross-attn loaded: {len(cross)}  Text/proj new: {len([k for k in missing if 'text_' in k or 'null_token' in k])}")
+    print(f"  Step {ckpt.get('step','?'):,} | Loaded: {len(ckpt['model'])-len(unexpected)} | "
+          f"Missing: {len(missing)} | Unexpected: {len(unexpected)}")
     return ckpt.get("config", {})
+
 
 def train(args):
     random.seed(CONFIG["seed"]); np.random.seed(CONFIG["seed"])
     torch.manual_seed(CONFIG["seed"]); torch.cuda.manual_seed_all(CONFIG["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
+
     checkpoint_dir = Path(CONFIG["checkpoint_dir"]); checkpoint_dir.mkdir(exist_ok=True)
-    mol_tokenizer = ChemicalTokenizer(str(ROOT / "chemical_tokenizer.json"))
+
+    # --- Tokenizers ---
+    vocab_path = ROOT / "smiles_vocab.json"
+    mol_tokenizer = SmilesTokenizer(str(vocab_path))
+    CONFIG["vocab_size"] = mol_tokenizer.vocab_size
     text_tokenizer = AutoTokenizer.from_pretrained(CONFIG["text_model"])
+    print(f"SMILES vocab: {mol_tokenizer.vocab_size} tokens, max_length: {CONFIG['max_length']}")
+
+    # --- Data ---
     data_dir = Path(CONFIG["data_dir"])
-    print("Loading CheBI-20 data...")
     train_df = pd.read_csv(data_dir / "chebi20_train.csv")
     val_df = pd.read_csv(data_dir / "chebi20_val.csv")
-    print(f"  Train: {len(train_df):,}  |  Val: {len(val_df):,}")
+    print(f"Train: {len(train_df):,} | Val: {len(val_df):,}")
+
     use_precomputed = CONFIG["use_precomputed"]
     train_scibert, val_scibert = None, None
     if use_precomputed:
-        print("Loading pre-computed SciBERT embeddings...")
         train_scibert = torch.load(data_dir / "chebi20_train_scibert.pt", weights_only=False)
         val_scibert = torch.load(data_dir / "chebi20_val_scibert.pt", weights_only=False)
-        print(f"  Train: {len(train_scibert):,}  Val: {len(val_scibert):,}  SciBERT OFF GPU ✅")
-    train_dataset = TextConditionedDataset(train_df, mol_tokenizer, scibert_states=train_scibert)
-    val_dataset = TextConditionedDataset(val_df, mol_tokenizer, scibert_states=val_scibert)
+        print(f"SciBERT pre-computed: {len(train_scibert):,} train, {len(val_scibert):,} val ✅")
+
+    train_dataset = TextConditionedDataset(train_df, mol_tokenizer,
+                                            max_length=CONFIG["max_length"], scibert_states=train_scibert)
+    val_dataset = TextConditionedDataset(val_df, mol_tokenizer,
+                                          max_length=CONFIG["max_length"], scibert_states=val_scibert)
     collator = TextDiffusionCollator(mol_tokenizer,
-        text_tokenizer=text_tokenizer if not use_precomputed else None,
+        text_tokenizer=None if use_precomputed else text_tokenizer,
         max_text_len=CONFIG["max_text_len"], use_precomputed=use_precomputed)
     train_loader = DataLoader(train_dataset, batch_size=CONFIG["batch_size"],
         shuffle=True, collate_fn=collator, num_workers=CONFIG["num_workers"], pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=CONFIG["batch_size"],
         shuffle=False, collate_fn=collator, num_workers=CONFIG["num_workers"], pin_memory=True)
-    print(f"\nBuilding model...")
+
+    # --- Model ---
     model = MolecularDiffusionModel(
         vocab_size=CONFIG["vocab_size"], hidden_size=CONFIG["hidden_size"],
         num_heads=CONFIG["num_heads"], ffn_dim=CONFIG["ffn_dim"],
@@ -229,27 +243,33 @@ def train(args):
         uncond_prob=CONFIG["uncond_prob"], dropout=CONFIG["dropout"],
         load_text_encoder=not use_precomputed).to(device)
     load_pretrained(model, args.checkpoint, device)
-    model = torch.compile(model)
+
     ema = EMA(model, decay=CONFIG["ema_decay"])
-    print(f"  EMA initialized (decay={CONFIG['ema_decay']}, {len(ema.shadow)} tensors)")
+    print(f"EMA: {len(ema.shadow)} tensors, decay={CONFIG['ema_decay']}")
+
+    # --- Optimizer ---
     acc_steps = CONFIG["gradient_accumulation"]
     steps_per_epoch = len(train_loader) // acc_steps
     total_steps = steps_per_epoch * CONFIG["num_epochs"]
-    new_kw = ["cross_attention", "text_proj", "null_token", "norm_cross", "pos_embedding"]
+
+    new_kw = ["cross_attention", "text_proj", "null_token", "norm_cross"]
     new_params, pre_params = [], []
     for name, p in model.named_parameters():
         if not p.requires_grad: continue
         (new_params if any(k in name for k in new_kw) else pre_params).append(p)
-    print(f"  New: {sum(p.numel() for p in new_params):,}  Pre: {sum(p.numel() for p in pre_params):,}")
+    print(f"New: {sum(p.numel() for p in new_params):,} | Pre: {sum(p.numel() for p in pre_params):,}")
+
     optimizer = AdamW([{"params": new_params, "lr": CONFIG["new_lr"]},
                         {"params": pre_params, "lr": CONFIG["pretrained_lr"]}],
                        weight_decay=CONFIG["weight_decay"])
     scheduler = get_cosine_schedule_with_warmup(optimizer,
         num_warmup_steps=CONFIG["warmup_steps"], num_training_steps=total_steps)
-    print(f"  Steps/epoch: {steps_per_epoch}  Total: {total_steps}  Warmup: {CONFIG['warmup_steps']}")
+    print(f"Steps/epoch: {steps_per_epoch} | Total: {total_steps} | Warmup: {CONFIG['warmup_steps']}")
+
     wandb.init(project=CONFIG["wandb_project"], config=CONFIG)
     global_step, best_val_loss = 0, float('inf')
     model.train()
+
     for epoch in range(CONFIG["num_epochs"]):
         print(f"\n--- Epoch {epoch+1}/{CONFIG['num_epochs']} ---")
         for step_idx, batch in enumerate(train_loader):
@@ -267,22 +287,25 @@ def train(args):
                 logits = model(input_ids, timesteps, text_embeds, text_pad)
                 loss = diffusion_loss(logits, labels) / acc_steps
             loss.backward()
+
             if (step_idx + 1) % acc_steps == 0:
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     [p for p in model.parameters() if p.requires_grad], CONFIG["max_grad_norm"])
                 optimizer.step(); scheduler.step(); optimizer.zero_grad()
                 ema.update(model)
                 global_step += 1
+
                 if global_step % CONFIG["log_every"] == 0:
-                    lr_n, lr_p = optimizer.param_groups[0]["lr"], optimizer.param_groups[1]["lr"]
+                    lr_n = optimizer.param_groups[0]["lr"]
+                    lr_p = optimizer.param_groups[1]["lr"]
                     print(f"Step {global_step:>6} | loss: {loss.item()*acc_steps:.4f} | "
                           f"grad: {grad_norm:.4f} | lr_new: {lr_n:.2e} | lr_pre: {lr_p:.2e}")
                     wandb.log({"train/loss": loss.item()*acc_steps, "train/grad_norm": float(grad_norm),
-                               "train/lr_new": lr_n, "train/lr_pre": lr_p,
-                               "train/epoch": epoch + step_idx/len(train_loader)}, step=global_step)
+                               "train/lr_new": lr_n, "train/lr_pre": lr_p}, step=global_step)
+
                 if global_step % CONFIG["val_every"] == 0:
                     val_loss = run_validation(model, ema, val_loader, device, use_precomputed)
-                    print(f"  → Val loss (EMA): {val_loss:.4f}")
+                    print(f"  → Val (EMA): {val_loss:.4f}")
                     wandb.log({"val/loss_ema": val_loss}, step=global_step)
                     generate_and_log(model, ema, mol_tokenizer, text_tokenizer, device, global_step, val_df)
                     if val_loss < best_val_loss:
@@ -292,15 +315,16 @@ def train(args):
                                     "model": model.state_dict(), "val_loss": val_loss,
                                     "config": CONFIG}, checkpoint_dir / "best_finetuned_model.pt")
                         ema.restore(model, backup)
-                        print(f"  ✅ New best EMA model (val_loss: {val_loss:.4f})")
+                        print(f"  ✅ Best EMA (val: {val_loss:.4f})")
+
                 if global_step % CONFIG["save_every"] == 0:
                     torch.save({"step": global_step, "epoch": epoch+1,
                                 "model": model.state_dict(), "ema": ema.state_dict(),
-                                "optimizer": optimizer.state_dict(),
-                                "scheduler": scheduler.state_dict(),
+                                "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
                                 "config": CONFIG}, checkpoint_dir / f"finetune_step{global_step}.pt")
-                    print(f"  💾 Checkpoint saved at step {global_step}")
-    print(f"\nTraining complete. Best val loss (EMA): {best_val_loss:.4f}")
+                    print(f"  💾 Step {global_step}")
+
+    print(f"\nDone. Best val (EMA): {best_val_loss:.4f}")
     wandb.finish()
 
 if __name__ == "__main__":
