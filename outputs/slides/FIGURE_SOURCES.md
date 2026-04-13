@@ -326,3 +326,64 @@ Supplementary to fig_compare_performance, showing RDK fingerprint metric separat
 
 Note: RDK fingerprint is a weaker metric for Morpheus relative to MACCS/atom-BLEU-2.
 Not included in main slide 12 comparison (which leads with MACCS and atom-BLEU-2 at 75-76%).
+
+
+---
+
+## AMENDMENT — 2026-04-12: Slide 10 Switched to MACCS
+
+Both slide 10 charts regenerated using MACCS Tanimoto as primary metric
+(previously Morgan FP Tanimoto). Motivation: visual consistency with slide 12
+(which already reports MACCS and atom-BLEU-2 vs TGM-DLM).
+Morgan retained on slide 11 as the stricter diagnostic for failure analysis.
+
+Morgan backups preserved:
+- `fig_progression_waterfall_morgan_backup.png/.pdf`
+- `fig_cfg_sweep_morgan_backup.png/.pdf`
+
+---
+
+## fig_progression_waterfall (Slide 10) — UPDATED to MACCS
+
+**Type:** Horizontal waterfall bar chart
+**Metric:** MACCS Tanimoto Similarity (was Morgan FP Tanimoto)
+**Source data:** Per-molecule eval CSVs (direct read, NOT summary_all_runs.csv)
+
+| Stage | MACCS | Delta | File |
+|-------|-------|-------|------|
+| BGE frozen (pre-EOS-fix) | 0.462 | — | chebi20_eval.csv |
+| EOS fix + tuning | 0.536 | +0.074 | chebi20_eval_cfg2.0_t0.6_s50.csv |
+| Contrastive BGE | 0.589 | +0.053 | chebi20_27M_contrastive_eval_cfg1.5_t0.4_s50.csv |
+| SciBERT contrastive 10ep | 0.599 | +0.010 | chebi20_27M_scibert_contrastive_eval_cfg1.5_t0.6_s50.csv |
+| SciBERT 20ep | 0.642 | +0.043 | chebi20_27M_scibert_20ep_contrastive_eval_cfg1.5_t0.6_s50.csv |
+| N=10 reranking | 0.651 | +0.009 | chebi20_27M_scibert_20ep_contrastive_eval_cfg1.5_t0.6_s50_rerank10.csv |
+
+Total improvement: +0.189 MACCS (0.462 → 0.651)
+
+**Correction:** BGE contrastive stage previously mislabeled as cfg=1.0 in FIGURE_SOURCES.
+Actual file used (and verified) is `chebi20_27M_contrastive_eval_cfg1.5_t0.4_s50.csv`
+(Morgan=0.2385 ≈ 0.239 matches the value shown on the current slide).
+
+No TGM-DLM reference line (MACCS reference is 0.854 — shown on slide 12 comparison instead).
+
+---
+
+## fig_cfg_sweep (Slide 10) — UPDATED to MACCS
+
+**Type:** Line chart
+**Metric:** MACCS Tanimoto Similarity (was Morgan FP Tanimoto)
+**Source data:** Per-molecule eval CSVs, SciBERT 20ep, temp=0.6 (or t=0.8 for CFG 2.5/3.0)
+
+| CFG | Temp | MACCS |
+|-----|------|-------|
+| 0.5 | 0.6 | 0.539 |
+| 0.8 | 0.6 | 0.612 |
+| 1.0 | 0.6 | 0.633 |
+| 1.5 | 0.6 | 0.642 ← peak |
+| 2.0 | 0.6 | 0.630 |
+| 2.5 | 0.8 | 0.591 |
+| 3.0 | 0.8 | 0.551 |
+
+Peak at CFG=1.5 (same as Morgan version). Inverted-U curve shape preserved.
+Note: no t=0.6 file exists for CFG 2.5 or 3.0 — t=0.8 used for those points (same as Morgan version).
+
