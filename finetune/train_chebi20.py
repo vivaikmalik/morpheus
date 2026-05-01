@@ -58,6 +58,23 @@ from tokenizer.chemicalTokenizer import ChemicalTokenizer
 # =============================================================================
 # CONFIG
 # =============================================================================
+# ---------------------------------------------------------------------------
+# Dependency-aware decoding constants (Stage 1: case (a) only)
+# ---------------------------------------------------------------------------
+# Token IDs for SELFIES ring opener tokens. When one of these commits at
+# position i-1, position i becomes a "count token" whose value depends on
+# the atom-position layout of positions 0..i-2. Dependency-aware decoding
+# defers committing position i until those preceding positions are filled.
+RING_OPENER_IDS = frozenset({5, 12, 25, 36, 85, 97, 102})
+# Token IDs:
+#   5  = [Ring1]      12 = [Ring2]
+#   25 = [=Ring1]     36 = [=Ring2]
+#   85 = [-\Ring1]    97 = [-/Ring1]    102 = [-/Ring2]
+# Note: this list does NOT include branch openers ([Branch1], [=Branch1], etc.).
+# Branch grammar is forward-looking (count tells how many forward tokens belong
+# to the branch body), so the "left-context-must-exist" rule does not apply
+# the same way. Branches are deferred to a future variant.
+
 PROJECT_ROOT = Path(__file__).parent.parent
 
 CONFIG = {
@@ -460,10 +477,52 @@ def run_validation(model, val_loader, device, tokenizer):
 # CFG GENERATION
 # =============================================================================
 
+def _compute_not_ready_mask(prev_input_ids, mask_token_id, opener_ids_tensor):
+    """
+    Identify count-token positions whose preceding context is not yet committed.
+    
+    Implements case (a) of dependency-aware decoding:
+      A position i is "not ready" iff
+        (1) prev_input_ids[i-1] is a committed ring opener token, AND
+        (2) any of prev_input_ids[0..i-2] is still the MASK token.
+    
+    Args:
+        prev_input_ids:    [B, L] long tensor — current state BEFORE this
+                           commit step. May contain MASK at some positions.
+        mask_token_id:     int — the MASK token ID in the vocab.
+        opener_ids_tensor: 1D long tensor on the same device — ring opener IDs.
+    
+    Returns:
+        not_ready: [B, L] bool tensor. True where position i should be
+                   deferred (forced into the re-mask set this step).
+    """
+    B, L = prev_input_ids.shape
+    device = prev_input_ids.device
+    
+    is_mask_prev = (prev_input_ids == mask_token_id)
+    cumulative_mask = is_mask_prev.cumsum(dim=-1) > 0
+    
+    prefix_has_mask_strict = torch.zeros_like(is_mask_prev)
+    if L >= 3:
+        prefix_has_mask_strict[:, 2:] = cumulative_mask[:, :-2]
+    
+    prev_at_i_minus_1 = torch.full_like(prev_input_ids, -1)
+    if L >= 2:
+        prev_at_i_minus_1[:, 1:] = prev_input_ids[:, :-1]
+    
+    is_opener = torch.isin(prev_at_i_minus_1, opener_ids_tensor)
+    is_committed = (prev_at_i_minus_1 != mask_token_id) & (prev_at_i_minus_1 != -1)
+    prev_is_committed_opener = is_opener & is_committed
+    
+    not_ready = prev_is_committed_opener & prefix_has_mask_strict
+    return not_ready
+
+
 @torch.no_grad()
 def _generate_cfg_batch(model, tokenizer, hf_tokenizer, prompts, device,
                         cfg_scale, temperature, num_steps,
-                        refine_passes=1, refine_mask_ratio=0.2):
+                        refine_passes=1, refine_mask_ratio=0.2,
+                        commit_strategy="standard"):
     max_length = CONFIG["max_length"]
     num_mols   = len(prompts)
 
@@ -493,6 +552,18 @@ def _generate_cfg_batch(model, tokenizer, hf_tokenizer, prompts, device,
         probs      = torch.softmax(logits / temperature, dim=-1)
         sampled    = torch.distributions.Categorical(probs=probs).sample()
         confidence = torch.gather(probs, 2, sampled.unsqueeze(-1)).squeeze(-1)
+
+        # Dependency-aware decoding (case a): defer count tokens whose
+        # preceding context is incomplete. Skip on the final step because
+        # the final step blocks MASK from logits and commits everything.
+        if commit_strategy == "dep_aware" and step_idx < num_steps - 1:
+            opener_ids_tensor = torch.tensor(
+                list(RING_OPENER_IDS), device=input_ids.device, dtype=torch.long
+            )
+            not_ready = _compute_not_ready_mask(
+                input_ids, tokenizer.mask_token_id, opener_ids_tensor
+            )
+            confidence = confidence.masked_fill(not_ready, float("-inf"))
 
         alpha_t     = (torch.cos(t_val * math.pi / 2) ** 2).item()
         num_to_mask = int((1.0 - alpha_t) * max_length)
@@ -629,7 +700,8 @@ def _apply_eos_truncation(model, tokenizer, hf_tokenizer,
 @torch.no_grad()
 def _rerank_candidates(model, tokenizer, hf_tokenizer, scorer, scorer_tokenizer,
                        prompts, device, cfg_scale, temperature, num_steps, rerank_n,
-                       refine_passes=1, refine_mask_ratio=0.2):
+                       refine_passes=1, refine_mask_ratio=0.2,
+                       commit_strategy="standard"):
     """
     Generate rerank_n candidates per prompt and return the highest-scoring one
     (by cosine similarity in the contrastive embedding space).
@@ -647,7 +719,8 @@ def _rerank_candidates(model, tokenizer, hf_tokenizer, scorer, scorer_tokenizer,
                                 cfg_scale=cfg_scale, temperature=temperature,
                                 num_steps=num_steps,
                                 refine_passes=refine_passes,
-                                refine_mask_ratio=refine_mask_ratio)
+                                refine_mask_ratio=refine_mask_ratio,
+                                commit_strategy=commit_strategy)
         )
 
     # Encode all text prompts once with the scorer's own tokenizer.
@@ -686,6 +759,7 @@ def generate_samples(model, tokenizer, hf_tokenizer, device, step):
         cfg_scale=CONFIG["gen_cfg_scale"],
         temperature=CONFIG["gen_temperature"],
         num_steps=CONFIG["gen_steps"],
+        commit_strategy="standard",
     )
     print(f"\n  CFG samples — step {step}")
     for i, (prompt, ids) in enumerate(zip(prompts, gen_ids)):
@@ -784,7 +858,8 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
                       scorer=None,
                       scorer_tokenizer=None,
                       refine_passes: int = 1,
-                      refine_mask_ratio: float = 0.2):
+                      refine_mask_ratio: float = 0.2,
+                      commit_strategy: str = "standard"):
     """
     Generate molecules for all ChEBI-20 test prompts and compute TGM-DLM metrics.
     Saves per-row CSV + summary text file.
@@ -823,6 +898,7 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
                 cfg_scale=cfg_scale, temperature=temperature,
                 num_steps=num_steps, rerank_n=rerank_n,
                 refine_passes=refine_passes, refine_mask_ratio=refine_mask_ratio,
+                commit_strategy=commit_strategy,
             )
         else:
             batch_ids = _generate_cfg_batch(
@@ -830,6 +906,7 @@ def evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv: Path,
                 batch_prompts, device,
                 cfg_scale=cfg_scale, temperature=temperature, num_steps=num_steps,
                 refine_passes=refine_passes, refine_mask_ratio=refine_mask_ratio,
+                commit_strategy=commit_strategy,
             )
         all_gen_ids.extend(batch_ids)
 
@@ -1307,6 +1384,10 @@ if __name__ == "__main__":
                              "(required when --encoder contrastive)")
     parser.add_argument("--model_size", type=str, default="27M",
                         help="Model size tag used in checkpoint/output filenames (default: 27M)")
+    parser.add_argument("--test_csv", type=str, default=None,
+                        help="Path to a custom test CSV (prompt,response columns). "
+                             "If not provided, uses the canonical data/chebi20_test.csv. "
+                             "Used for smoke tests on subsets of the test set.")
     parser.add_argument("--num_epochs", type=int, default=None,
                         help="Override CONFIG num_epochs (default: 10)")
     parser.add_argument("--rerank_n", type=int, default=1,
@@ -1321,6 +1402,12 @@ if __name__ == "__main__":
     parser.add_argument("--refine_mask_ratio", type=float, default=0.2,
                         help="Fraction of positions to re-mask each refinement pass (default=0.2). "
                              "Also sets the t_start of the refinement denoising schedule.")
+    parser.add_argument("--commit_strategy", type=str, default="standard",
+                        choices=["standard", "dep_aware"],
+                        help="Commit strategy for MaskGIT denoising loop. "
+                             "'standard' (default) uses confidence-only re-masking. "
+                             "'dep_aware' additionally defers count tokens whose "
+                             "preceding context is incomplete (case a only).")
     args = parser.parse_args()
 
     if args.encoder == "contrastive" and args.contrastive_ckpt is None:
@@ -1366,6 +1453,13 @@ if __name__ == "__main__":
         # Ensure ChEBI-20 data is present (downloads if needed)
         data_dir = Path(CONFIG["data_dir"])
         _, _, test_csv = prepare_chebi20(tokenizer_path, data_dir)
+
+        # Override with --test_csv if provided (for smoke tests on subsets)
+        if args.test_csv is not None:
+            test_csv = Path(args.test_csv)
+            if not test_csv.exists():
+                raise FileNotFoundError(f"--test_csv path not found: {test_csv}")
+            print(f"[eval_only] Using custom test CSV: {test_csv}")
 
         model = MolecularDiffusionModel(
             vocab_size      = CONFIG["vocab_size"],
@@ -1413,6 +1507,7 @@ if __name__ == "__main__":
                           scorer=rerank_scorer,
                           scorer_tokenizer=rerank_scorer_tok,
                           refine_passes=args.refine_passes,
-                          refine_mask_ratio=args.refine_mask_ratio)
+                          refine_mask_ratio=args.refine_mask_ratio,
+                          commit_strategy=args.commit_strategy)
     else:
         train()
