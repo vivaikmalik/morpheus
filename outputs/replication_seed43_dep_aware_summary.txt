@@ -1,19 +1,19 @@
 =================================================================
   ChEBI-20 EVALUATION — Morpheus 27M_scibert_20ep [contrastive]
   Checkpoint : chebi20_27M_scibert_20ep_contrastive.pt
-  Test set   : 2542 molecules
+  Test set   : 40 molecules
   CFG scale  : 1.5  Temperature: 0.8  Steps: 50
 =================================================================
   Validity (%)                     100.0%
-  Exact Match (%)                    0.9%
-  BLEU-2 (char)                   0.6148
-  BLEU-4 (char)                   0.4943
-  BLEU-2 (atom)                   0.5933
-  BLEU-4 (atom)                   0.4499
-  Levenshtein Similarity          0.5152
-  Morgan FP Tanimoto (valid)      0.2944
-  MACCS FP Tanimoto  (valid)      0.6341
-  RDK FP Tanimoto    (valid)      0.4045
+  Exact Match (%)                    0.0%
+  BLEU-2 (char)                   0.5470
+  BLEU-4 (char)                   0.4015
+  BLEU-2 (atom)                   0.5253
+  BLEU-4 (atom)                   0.3592
+  Levenshtein Similarity          0.4419
+  Morgan FP Tanimoto (valid)      0.1960
+  MACCS FP Tanimoto  (valid)      0.5889
+  RDK FP Tanimoto    (valid)      0.3508
 =================================================================
 
 Reference: TGM-DLM (AAAI 2024) on ChEBI-20

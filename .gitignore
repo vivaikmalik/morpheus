@@ -5,3 +5,7 @@ wandb/
 *.pt
 checkpoints/*.pt
 data/raw/
+
+# Combined pretrain corpus (182MB; raw JSONs exceed GitHub 100MB limit)
+# Rebuild via scripts/build_combined_pretrain.py + fix_molinst_extraction.py
+data/combined_pretrain_v1/
