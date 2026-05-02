@@ -50,39 +50,39 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 CONFIG = {
     # Model architecture (must match pretrained checkpoint)
     "vocab_size":  110,
-    "hidden_size": 512,
-    "num_heads":   8,
-    "ffn_dim":     1024,
-    "num_layers":  8,
+    "hidden_size": 1024,
+    "num_heads":  16,
+    "ffn_dim":     4096,
+    "num_layers":  12,
     # IMPORTANT: max_length can DIFFER from pretraining because RoPE
     # is parameter-free and generalizes to any sequence length.
     # For CheBI-20 fine-tuning, you typically want this larger (e.g. 128).
-    "max_length":  128,
+    "max_length":  256,
     "dropout":     0.1,
 
     # Text
     "text_model":   "BAAI/bge-large-en-v1.5",
-    "max_text_len": 128,
+    "max_text_len": 256,
     "uncond_prob":  0.1,
 
     # Training
-    "batch_size":             32,
+    "batch_size":             128,  # Increased for high-VRAM Blackwell GPUs
     "gradient_accumulation":  1,
     "new_lr":                 2e-4,    # cross-attn, text_proj, null_token
     "pretrained_lr":          2e-5,    # self-attn, FFN, embeddings
     "weight_decay":           0.01,
-    "max_grad_norm":          1.0,
+    "max_grad_norm":          1.1,
     "num_epochs":             20,
-    "warmup_steps":           500,
+    "warmup_steps":           444,
 
     # Loss weights
     "eos_weight": 5.0,
     "pad_weight": 0.05,
 
     # Validation
-    "val_every":      500,
+    "val_every":      100,
     "val_max_batches": 100,
-    "save_every":     2000,
+    "save_every":     500,
 
     # Generation samples during training
     "gen_steps":       50,

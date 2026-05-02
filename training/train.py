@@ -33,10 +33,10 @@ from model.molecularDiffusionModel import MolecularDiffusionModel
 CONFIG = {
     # Model — match dep-aware 27M backbone
     "vocab_size":   110,
-    "hidden_size":  512,
-    "num_heads":    8,
-    "ffn_dim":      1024,
-    "num_layers":   8,
+    "hidden_size":  1024,
+    "num_heads":    16,
+    "ffn_dim":      4096,
+    "num_layers":   12,
     "max_length":   74,
     "dropout":      0.1,
 
@@ -45,9 +45,9 @@ CONFIG = {
     "gradient_accumulation": 1,
     "learning_rate":         3e-4,
     "weight_decay":          0.01,
-    "max_grad_norm":         1.0,
-    "num_epochs":            20,
-    "warmup_steps":          2000,
+    "max_grad_norm":         1.1,
+    "num_epochs":            11,
+    "warmup_steps":          2222,
 
     # Loss weights
     "eos_weight":  5.0,
