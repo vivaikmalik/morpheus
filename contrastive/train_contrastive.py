@@ -336,7 +336,7 @@ def main():
     parser.add_argument("--tokenizer_path", default="chemical_tokenizer.json")
     parser.add_argument("--output_ckpt", default="checkpoints/contrastive_aligner.pt")
     parser.add_argument("--text_model", default="BAAI/bge-large-en-v1.5")
-    parser.add_argument("--proj_dim", type=int, default=512)
+    parser.add_argument("--proj_dim", type=int, default=1024)  # Match new 1024 backbone dim
     parser.add_argument("--max_text_length", type=int, default=128)
     parser.add_argument("--freeze_molecule", action="store_true", default=True)
     parser.add_argument("--epochs", type=int, default=15)

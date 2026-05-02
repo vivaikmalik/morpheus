@@ -43,7 +43,7 @@ CONFIG = {
     # Training
     "batch_size":            128,
     "gradient_accumulation": 1,
-    "learning_rate":         3e-4,
+    "learning_rate":         1.5e-4,  # Lowered for 150M+ parameter stability
     "weight_decay":          0.01,
     "max_grad_norm":         1.1,
     "num_epochs":            11,
