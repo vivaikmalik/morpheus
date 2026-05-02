@@ -89,16 +89,19 @@ def load_contrastive_scorer(ckpt_path, device):
 
 @torch.no_grad()
 def generate_cfg_with_refinement(model, tokenizer, text_tok, prompts, device,
+                                   max_length, max_text_len=128,
                                    cfg_scale=3.0, num_steps=50, temperature=1.0,
                                    refine_passes=1, refine_mask_ratio=0.2):
-    """Generate with optional iterative refinement passes."""
-    max_length = model.token_embedding.num_embeddings  # cheap proxy; actual max from config
-    # Get max_length from any block's RoPE cache
-    max_length = 74  # fallback; passed via config externally
+    """Generate with optional iterative refinement passes.
+
+    Args:
+        max_length: molecule sequence length (read from checkpoint config — DO NOT hardcode)
+        max_text_len: text encoder context length
+    """
     B = len(prompts)
 
     text_inputs = text_tok(prompts, padding=True, truncation=True,
-                            max_length=128, return_tensors="pt").to(device)
+                            max_length=max_text_len, return_tensors="pt").to(device)
     text_pad = (text_inputs["attention_mask"] == 0)
     text_embeds = model.get_text_embeddings(text_inputs["input_ids"],
                                               text_inputs["attention_mask"])
@@ -141,9 +144,11 @@ def generate_cfg_with_refinement(model, tokenizer, text_tok, prompts, device,
         probs_r = torch.softmax(logits_r / temperature, dim=-1)
         confidence = torch.gather(probs_r, 2, input_ids.unsqueeze(-1)).squeeze(-1)
 
-        # Protect PAD positions (don't re-mask)
-        pad_mask = (input_ids == tokenizer.pad_token_id)
-        confidence = confidence.masked_fill(pad_mask, 1.0)
+        # Protect PAD and EOS positions (don't re-mask)
+        # EOS especially: re-masking a correctly-placed EOS would let the model
+        # fill it with a stray atom, ruining sequence termination.
+        special_mask = (input_ids == tokenizer.pad_token_id) | (input_ids == tokenizer.eos_token_id)
+        confidence = confidence.masked_fill(special_mask, 1.0)
 
         # Re-mask the bottom refine_mask_ratio
         n_remask = max(1, int(refine_mask_ratio * max_length))
@@ -175,7 +180,7 @@ def generate_cfg_with_refinement(model, tokenizer, text_tok, prompts, device,
 
 @torch.no_grad()
 def apply_eos_truncation(model, tokenizer, text_tok, all_ids, prompts, device,
-                          batch_size=32):
+                          max_text_len=128, batch_size=32):
     """Forward pass at t=0, find max-EOS-prob position, truncate."""
     truncated = []
     for start in range(0, len(prompts), batch_size):
@@ -191,7 +196,7 @@ def apply_eos_truncation(model, tokenizer, text_tok, all_ids, prompts, device,
             ids_pad[i, :len(x)] = torch.tensor(x, device=device)
 
         text_inputs = text_tok(b_prompts, padding=True, truncation=True,
-                                max_length=128, return_tensors="pt").to(device)
+                                max_length=max_text_len, return_tensors="pt").to(device)
         text_pad = (text_inputs["attention_mask"] == 0)
         text_embeds = model.get_text_embeddings(
             text_inputs["input_ids"], text_inputs["attention_mask"])
@@ -202,16 +207,11 @@ def apply_eos_truncation(model, tokenizer, text_tok, all_ids, prompts, device,
 
         for mol_idx in range(B):
             ids = b_ids[mol_idx][:]
-            probs = eos_probs[mol_idx].cpu().tolist()
-            best_pos, best_prob = -1, -1.0
-            for pos, (tok, p) in enumerate(zip(ids, probs)):
-                if tok in (tokenizer.eos_token_id, tokenizer.pad_token_id,
-                            tokenizer.mask_token_id):
-                    continue
-                if p > best_prob:
-                    best_prob, best_pos = p, pos
-            if best_pos >= 0:
-                ids = ids[:best_pos]
+            # Find the sequence position with the highest probability of being EOS.
+            # Use argmax directly — do NOT skip existing EOS positions, otherwise
+            # a correctly-placed EOS gets ignored and we truncate at the wrong spot.
+            best_pos = int(torch.argmax(eos_probs[mol_idx]).item())
+            ids = ids[:best_pos]
             truncated.append(ids)
     return truncated
 
@@ -313,8 +313,13 @@ def evaluate(args):
 
     text_tok = AutoTokenizer.from_pretrained(text_model_name)
 
+    # Read length params from checkpoint (DO NOT hardcode!)
+    mol_max_length = config["max_length"]
+    max_text_len = config.get("max_text_len", 128)
+    print(f"Generation lengths: molecule={mol_max_length}, text={max_text_len}")
+
     # Load contrastive scorer for reranking (separate from text encoder)
-    scorer, scorer_tok, mol_max = (None, None, config["max_length"])
+    scorer, scorer_tok, mol_max = (None, None, mol_max_length)
     if args.rerank_n > 1 and args.contrastive_ckpt:
         scorer, scorer_tok, mol_max = load_contrastive_scorer(
             Path(args.contrastive_ckpt), device)
@@ -337,6 +342,7 @@ def evaluate(args):
         for _ in range(args.rerank_n):
             cand = generate_cfg_with_refinement(
                 model, tokenizer, text_tok, prompts, device,
+                max_length=mol_max_length, max_text_len=max_text_len,
                 cfg_scale=args.cfg, num_steps=args.steps, temperature=args.temp,
                 refine_passes=args.refine_passes, refine_mask_ratio=0.2)
             all_candidates.append(cand)
@@ -353,6 +359,7 @@ def evaluate(args):
         if args.eos_truncate:
             gen_ids = apply_eos_truncation(model, tokenizer, text_tok,
                                              gen_ids, prompts, device,
+                                             max_text_len=max_text_len,
                                              batch_size=args.batch_size)
 
         # Decode and score
