@@ -80,8 +80,9 @@ CONFIG = {
     "num_epochs"      : 3,
     "warmup_steps"    : 200,
 
-    "eos_weight"  : 5.0,
-    "pad_weight"  : 0.05,
+    # revealPad-style loss weights (EOS as normal token, mild PAD downweight)
+    "eos_weight"  : 1.0,
+    "pad_weight"  : 0.1,
 
     "num_workers"     : 2,
     "seed"            : 42,
@@ -391,17 +392,19 @@ class ConditionalDiffusionCollator:
         }
 
 # =============================================================================
-# LOSS  (EOS fix: eos_weight=5.0, pad_weight=0.05)
+# LOSS — revealPad-style (eos_weight=1.0, pad_weight=0.1)
 # =============================================================================
 def diffusion_loss(logits, labels, timesteps,
                    pad_token_id=0, eos_token_id=2,
-                   pad_weight=0.05, eos_weight=5.0):
+                   pad_weight=0.1, eos_weight=1.0):
+    """revealPad-style loss: EOS treated as a normal token, PAD mildly
+    downweighted. The previous eos_weight=5.0 destabilized fine-tuning."""
     B, seq_len, vocab_size = logits.shape
     device = logits.device
 
     vocab_weights               = torch.ones(vocab_size, device=device)
     vocab_weights[pad_token_id] = pad_weight
-    vocab_weights[eos_token_id] = eos_weight
+    vocab_weights[eos_token_id] = eos_weight  # 1.0 → identical to default
 
     raw_loss = F.cross_entropy(
         logits.view(-1, vocab_size),

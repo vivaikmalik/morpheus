@@ -88,8 +88,9 @@ CONFIG = {
     "num_epochs"      : 5,
     "warmup_steps"    : 1000,
 
-    "eos_weight"  : 5.0,
-    "pad_weight"  : 0.05,
+    # revealPad-style loss weights (EOS as normal token, mild PAD downweight)
+    "eos_weight"  : 1.0,
+    "pad_weight"  : 0.1,
 
     "num_workers"     : 2,
     "seed"            : 42,
@@ -399,17 +400,19 @@ class ConditionalDiffusionCollator:
         }
 
 # =============================================================================
-# LOSS  (eos_weight=5.0, pad_weight=0.05 from the start)
+# LOSS — revealPad-style (eos_weight=1.0, pad_weight=0.1)
 # =============================================================================
 def diffusion_loss(logits, labels, timesteps,
                    pad_token_id=0, eos_token_id=2,
-                   pad_weight=0.05, eos_weight=5.0):
+                   pad_weight=0.1, eos_weight=1.0):
+    """revealPad-style loss: EOS treated as a normal token, PAD mildly
+    downweighted. The previous eos_weight=5.0 destabilized fine-tuning."""
     B, seq_len, vocab_size = logits.shape
     device = logits.device
 
     vocab_weights               = torch.ones(vocab_size, device=device)
     vocab_weights[pad_token_id] = pad_weight
-    vocab_weights[eos_token_id] = eos_weight
+    vocab_weights[eos_token_id] = eos_weight  # 1.0 → identical to default
 
     raw_loss = F.cross_entropy(
         logits.view(-1, vocab_size),
@@ -613,7 +616,7 @@ def save_cfg_samples(model, tokenizer, hf_tokenizer, device):
     avg_tok        = sum(r["token_count"] for r in results) / len(results)
 
     with open(SAMPLES_PATH, "w") as f:
-        f.write("CFG GENERATION SAMPLES — Full Fresh Fine-tune (eos_weight=5.0)\n")
+        f.write("CFG GENERATION SAMPLES — Full Fresh Fine-tune (revealPad-style loss)\n")
         f.write(f"cfg_scale={cfg_scale}  temperature={temperature}  steps={num_steps}\n")
         f.write(f"Valid: {valid_count}/{num_mols}  |  Avg token length: {avg_tok:.1f} (target ~43)\n")
         f.write("=" * 70 + "\n\n")
@@ -661,7 +664,7 @@ def save_plots():
         ax.plot(val_rows["step"], val_rows["val_loss"],
                 label="Val loss", color="#F44336", linestyle="--", **style)
     ax.set_xlabel("Step"); ax.set_ylabel("Loss")
-    ax.set_title("Full Fine-tune (eos_weight=5.0) — Loss Curves")
+    ax.set_title("Full Fine-tune (revealPad-style loss) — Loss Curves")
     ax.legend(); ax.grid(True, alpha=0.3)
     fig.tight_layout()
     fig.savefig(PLOT_DIR / "loss_curves.png", dpi=300)

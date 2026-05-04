@@ -1,18 +1,20 @@
 """
 finetune/resume_eos_fix.py
 --------------------------
-Resumes fine-tuning from checkpoints/molinst_27M_frozen_no_eos.pt with two fixes:
+Resumes fine-tuning from checkpoints/molinst_27M_frozen_no_eos.pt.
 
-  1. EOS weight fix: diffusion_loss now uses eos_weight=5.0, pad_weight=0.05
-     (matching train_upscaled.py) so the model learns to terminate sequences
-     at the correct length instead of padding to the 74-token window.
+Loss policy: revealPad-style — EOS is treated as a normal token (weight 1.0)
+and PAD is mildly downweighted (0.1). The earlier eos_weight=5.0 /
+pad_weight=0.05 scheme was empirically unstable; this file now matches the
+loss used by training/train.py and the revealPad branch.
 
-  2. Lower LR (1e-5) with short warmup (200 steps) — gentle continuation,
-     not aggressive retraining.
+Other settings:
+  - Lower LR (1e-5) with short warmup (200 steps) — gentle continuation,
+    not aggressive retraining.
 
 Changes vs train_text_condition.py:
   - Load checkpoint: molinst_27M_frozen_no_eos.pt  (not zinc_17M_pretrain.pt)
-  - diffusion_loss: eos_weight=5.0, pad_weight=0.05
+  - diffusion_loss: eos_weight=1.0, pad_weight=0.1  (revealPad style)
   - learning_rate: 1e-5
   - num_epochs: 3
   - warmup_steps: 200 (fixed, not ratio-based)
@@ -77,9 +79,9 @@ CONFIG = {
     "num_epochs"      : 3,          # ← short run
     "warmup_steps"    : 200,        # ← fixed steps, not ratio-based
 
-    # EOS/PAD loss weights (the core fix)
-    "eos_weight"  : 5.0,
-    "pad_weight"  : 0.05,
+    # EOS/PAD loss weights (revealPad-style: EOS treated as a normal token)
+    "eos_weight"  : 1.0,
+    "pad_weight"  : 0.1,
 
     # Data
     "data_path"     : "data/train.csv",
@@ -110,24 +112,28 @@ CONFIG = {
 }
 
 # =============================================================================
-# LOSS — with EOS weight fix
+# LOSS — revealPad-style (EOS treated as a normal token)
 # =============================================================================
 
 def diffusion_loss(logits, labels, timesteps,
                    pad_token_id=0, eos_token_id=2,
-                   pad_weight=0.05, eos_weight=5.0):
+                   pad_weight=0.1, eos_weight=1.0):
     """
     Weighted cross-entropy on masked positions only, with:
-      - eos_weight=5.0  → emphasise learning sequence termination
-      - pad_weight=0.05 → de-emphasise padding (was 0.1 in original)
-      - (1-t) weighting → emphasise low-noise steps
+      - pad_weight=0.1   → mild PAD downweighting (revealPad default)
+      - eos_weight=1.0   → EOS treated as a normal token; the model picks up
+                            sequence termination naturally from the masked-
+                            modeling objective. The earlier 5.0 upweighting
+                            destabilized training (loss spikes when EOS got
+                            masked at high noise levels).
+      - (1-t) weighting  → emphasise low-noise steps
     """
     B, seq_len, vocab_size = logits.shape
     device = logits.device
 
     vocab_weights                = torch.ones(vocab_size, device=device)
     vocab_weights[pad_token_id]  = pad_weight
-    vocab_weights[eos_token_id]  = eos_weight
+    vocab_weights[eos_token_id]  = eos_weight  # 1.0 → identical to default
 
     raw_loss = torch.nn.functional.cross_entropy(
         logits.view(-1, vocab_size),

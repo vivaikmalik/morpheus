@@ -5,7 +5,7 @@ from pathlib import Path
 from transformers import AutoModel
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from model.embeddings import TimestepEmbedding, PositionalEmbedding
+from model.embeddings import TimestepEmbedding, RotaryEmbedding
 from model.transformerBlock import TransformerBlock
 
 
@@ -29,18 +29,18 @@ class MolecularDiffusionModel(nn.Module):
         self.vocab_size   = vocab_size
         self.hidden_size  = hidden_size
         self.uncond_prob  = uncond_prob
+        self.max_length   = max_length
 
         # ------------------------------------------------------------------ #
-        # TEXT ENCODER & PROJECTOR (FROZEN)                                 #
+        # TEXT ENCODER & PROJECTOR (FROZEN)                                  #
         # ------------------------------------------------------------------ #
         self.text_encoder = AutoModel.from_pretrained(text_model_name)
-        # Freeze the text encoder
         for param in self.text_encoder.parameters():
             param.requires_grad = False
 
         text_hidden_size = self.text_encoder.config.hidden_size
 
-        # MLP Projector: maps text encoder output → model hidden_size.
+        # MLP projector: text encoder output → model hidden_size.
         # Assumes text_hidden_size == 1024 (BGE-large default).
         self.text_proj = nn.Sequential(
             nn.Linear(text_hidden_size, ffn_dim),
@@ -58,15 +58,25 @@ class MolecularDiffusionModel(nn.Module):
         self.null_token = nn.Parameter(torch.randn(1, 1, hidden_size))
 
         # ------------------------------------------------------------------ #
-        # DIFFUSION EMBEDDINGS                                              #
+        # DIFFUSION EMBEDDINGS                                               #
         # ------------------------------------------------------------------ #
-        self.token_embedding = nn.Embedding(vocab_size, hidden_size, padding_idx=pad_token_id)
-        self.pos_embedding = PositionalEmbedding(max_length, hidden_size)
+        self.token_embedding    = nn.Embedding(vocab_size, hidden_size,
+                                               padding_idx=pad_token_id)
         self.timestep_embedding = TimestepEmbedding(hidden_size)
-        self.input_norm = nn.LayerNorm(hidden_size)
+        self.input_norm         = nn.LayerNorm(hidden_size)
+
+        # RoPE replaces the old learned PositionalEmbedding. It carries no
+        # trainable params (only buffers), and is applied to Q/K inside each
+        # SelfAttention. Built with a generous max_length so we never hit the
+        # cache rebuild path during typical training/inference.
+        head_dim = hidden_size // num_heads
+        self.rope = RotaryEmbedding(
+            head_dim=head_dim,
+            max_length=max(max_length, 4096),
+        )
 
         # ------------------------------------------------------------------ #
-        # TRANSFORMER BLOCKS                                                #
+        # TRANSFORMER BLOCKS                                                 #
         # ------------------------------------------------------------------ #
         self.blocks = nn.ModuleList([
             TransformerBlock(hidden_size, num_heads, ffn_dim, dropout)
@@ -92,7 +102,6 @@ class MolecularDiffusionModel(nn.Module):
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
 
-        
         for block in self.blocks:
             nn.init.zeros_(block.cross_attention.out_proj.weight)
             nn.init.zeros_(block.cross_attention.out_proj.bias)
@@ -108,8 +117,8 @@ class MolecularDiffusionModel(nn.Module):
         encoder_proj is set to None and the forward path is identical to default.
         """
         self.text_encoder = encoder
-        enc_dim      = encoder.config.hidden_size
-        proj_in_dim  = self.text_proj[0].in_features   # first Linear of text_proj
+        enc_dim     = encoder.config.hidden_size
+        proj_in_dim = self.text_proj[0].in_features   # first Linear of text_proj
 
         if enc_dim != proj_in_dim:
             proj = nn.Linear(enc_dim, proj_in_dim).to(next(encoder.parameters()).device)
@@ -148,21 +157,27 @@ class MolecularDiffusionModel(nn.Module):
             # Drop text conditioning with probability `uncond_prob`
             keep_mask = torch.rand(B, device=device) > self.uncond_prob
             keep_mask = keep_mask.view(B, 1, 1)
-            
-            null_seq = self.null_token.expand(B, text_embeds.size(1), -1)
+
+            null_seq    = self.null_token.expand(B, text_embeds.size(1), -1)
             text_embeds = torch.where(keep_mask, text_embeds, null_seq)
 
         padding_mask = (input_ids == self.pad_token_id)
 
+        # Token + timestep embeddings (NO additive positional embedding —
+        # position is now injected via RoPE inside each self-attention).
         x = self.token_embedding(input_ids)
-        pos = self.pos_embedding(seq_len, device)
-        x = x + pos
         t_emb = self.timestep_embedding(timesteps)
         x = x + t_emb.unsqueeze(1)
         x = self.input_norm(x)
 
+        # Compute RoPE cos/sin once for this forward pass and reuse across blocks.
+        rope = self.rope(seq_len, device=device, dtype=x.dtype)
+
         for block in self.blocks:
-            x = block(x, text_embeds, padding_mask, text_padding_mask)
+            x = block(x, text_embeds,
+                      padding_mask=padding_mask,
+                      text_padding_mask=text_padding_mask,
+                      rope=rope)
 
         x      = self.output_norm(x)
         logits = self.lm_head(x)

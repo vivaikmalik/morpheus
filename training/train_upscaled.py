@@ -32,6 +32,7 @@ import selfies as sf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import wandb
 from rdkit import Chem
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -39,7 +40,7 @@ from transformers import get_cosine_schedule_with_warmup
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from model.embeddings import TimestepEmbedding, PositionalEmbedding
+from model.embeddings import TimestepEmbedding, RotaryEmbedding
 from model.transformerBlock import SelfAttention, FeedForward
 from tokenizer.chemicalTokenizer import ChemicalTokenizer
 
@@ -64,9 +65,10 @@ CONFIG = {
     "num_epochs"      : 15,
     "warmup_steps"    : 1000,
 
-    # Loss token weights
-    "eos_weight"      : 5.0,   # emphasise learning sequence termination
-    "pad_weight"      : 0.05,
+    # Loss token weights (revealPad-style: EOS treated as a normal token,
+    # PAD mildly downweighted; the previous 5.0 / 0.05 was unstable)
+    "eos_weight"      : 1.0,
+    "pad_weight"      : 0.1,
 
     # Data
     "val_fraction"    : 0.10,
@@ -81,6 +83,7 @@ CONFIG = {
     "checkpoint_dir"  : str(Path(__file__).parent.parent / "checkpoints"),
     "log_path"        : str(Path(__file__).parent.parent / "outputs" / "pretrain_upscaled_log.csv"),
     "plot_dir"        : str(Path(__file__).parent.parent / "outputs" / "plots" / "pretrain_upscaled"),
+    "wandb_project"   : "morpheus-pretrain",
 }
 
 # =============================================================================
@@ -108,10 +111,10 @@ class PretrainBlock(nn.Module):
         self.ffn       = FeedForward(hidden_size, ffn_dim, dropout)
         self.dropout   = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor, padding_mask=None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, padding_mask=None, rope=None) -> torch.Tensor:
         residual = x
         x = self.norm1(x)
-        x = self.attention(x, padding_mask)
+        x = self.attention(x, padding_mask, rope=rope)
         x = self.dropout(x)
         x = residual + x
 
@@ -131,16 +134,16 @@ class PretrainDiffusionModel(nn.Module):
     MolecularDiffusionModel so that fine-tuning with strict=False works
     without any key renaming:
 
-        token_embedding  ← identical
-        pos_embedding    ← identical
+        token_embedding    ← identical
+        rope               ← identical (buffer-only, no trainable params)
         timestep_embedding ← identical
-        input_norm       ← identical
+        input_norm         ← identical
         blocks.{i}.norm1 / .attention / .norm2 / .ffn ← identical
-        output_norm      ← identical
-        lm_head          ← identical (weight-tied with token_embedding)
+        output_norm        ← identical
+        lm_head            ← identical (weight-tied with token_embedding)
 
     NOT present here (MolecularDiffusionModel adds them fresh at finetune):
-        text_encoder, text_proj, null_token,
+        text_encoder, text_proj, null_token, encoder_proj,
         blocks.{i}.norm_cross, blocks.{i}.cross_attention
     """
 
@@ -161,9 +164,16 @@ class PretrainDiffusionModel(nn.Module):
         self.pad_token_id = pad_token_id
 
         self.token_embedding    = nn.Embedding(vocab_size, hidden_size, padding_idx=pad_token_id)
-        self.pos_embedding      = PositionalEmbedding(max_length, hidden_size)
         self.timestep_embedding = TimestepEmbedding(hidden_size)
         self.input_norm         = nn.LayerNorm(hidden_size)
+
+        # RoPE (buffer-only, no trainable params) — matches
+        # MolecularDiffusionModel.rope so checkpoint keys align.
+        head_dim = hidden_size // num_heads
+        self.rope = RotaryEmbedding(
+            head_dim=head_dim,
+            max_length=max(max_length, 4096),
+        )
 
         self.blocks = nn.ModuleList([
             PretrainBlock(hidden_size, num_heads, ffn_dim, dropout)
@@ -194,13 +204,17 @@ class PretrainDiffusionModel(nn.Module):
 
         padding_mask = (input_ids == self.pad_token_id)
 
+        # Token + timestep embeddings (NO additive positional embedding —
+        # position is injected via RoPE inside each SelfAttention).
         x = self.token_embedding(input_ids)
-        x = x + self.pos_embedding(seq_len, device)
         x = x + self.timestep_embedding(timesteps).unsqueeze(1)
         x = self.input_norm(x)
 
+        # Compute RoPE cos/sin once and reuse across all blocks.
+        rope = self.rope(seq_len, device=device, dtype=x.dtype)
+
         for block in self.blocks:
-            x = block(x, padding_mask)
+            x = block(x, padding_mask, rope=rope)
 
         x = self.output_norm(x)
         return self.lm_head(x)
@@ -340,17 +354,23 @@ class DiffusionCollator:
 
 
 # =============================================================================
-# LOSS
+# LOSS — revealPad-style (EOS treated as a normal token)
 # =============================================================================
 
 def diffusion_loss(logits, labels, timesteps, pad_id=0, eos_id=2,
-                   pad_weight=0.05, eos_weight=5.0):
+                   pad_weight=0.1, eos_weight=1.0):
+    """
+    revealPad-style weighted CE on masked positions only.
+    EOS is left at weight 1.0; the model learns termination from the
+    masked-modeling objective without artificial upweighting (which was
+    empirically unstable).
+    """
     B, seq_len, vocab_size = logits.shape
     device = logits.device
 
     vocab_weights              = torch.ones(vocab_size, device=device)
     vocab_weights[pad_id]      = pad_weight
-    vocab_weights[eos_id]      = eos_weight
+    vocab_weights[eos_id]      = eos_weight  # 1.0 → identical to default
 
     raw_loss = F.cross_entropy(
         logits.view(-1, vocab_size),
@@ -637,6 +657,15 @@ def train():
     log_writer.writeheader()
     log_file.flush()
 
+    # --- W&B ---
+    wandb.init(
+        project  = CONFIG["wandb_project"],
+        config   = CONFIG,
+        reinit   = True,
+        settings = wandb.Settings(start_method="thread"),
+    )
+    print(f"[wandb] Run started: {wandb.run.url}")
+
     # --- Training loop ---
     global_step   = 0
     best_val_loss = float("inf")
@@ -679,7 +708,9 @@ def train():
                     )
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), CONFIG["max_grad_norm"])
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), CONFIG["max_grad_norm"]
+                ).item()
                 scaler.step(optimizer)
                 scaler.update()
             else:
@@ -692,7 +723,9 @@ def train():
                     eos_weight=CONFIG["eos_weight"],
                 )
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), CONFIG["max_grad_norm"])
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), CONFIG["max_grad_norm"]
+                ).item()
                 optimizer.step()
 
             scheduler.step()
@@ -718,10 +751,19 @@ def train():
                     f"  step {global_step:>6}/{total_steps} | "
                     f"loss {loss.item():.4f} | "
                     f"lr {lr:.2e} | "
+                    f"grad_norm {grad_norm:.3f} | "
                     f"{tokens_per_sec_ema:,.0f} tok/s | "
                     f"elapsed {elapsed_min:.1f}m | "
                     f"ETA {eta_min:.1f}m"
                 )
+
+                wandb.log({
+                    "train/loss":          loss.item(),
+                    "train/lr":            lr,
+                    "train/grad_norm":     grad_norm,
+                    "train/tokens_per_sec": tokens_per_sec_ema,
+                    "train/elapsed_min":   elapsed_min,
+                }, step=global_step)
 
                 log_writer.writerow({
                     "epoch"        : epoch + 1,
@@ -742,6 +784,11 @@ def train():
 
         print(f"[epoch {epoch+1}] val_loss = {val_loss:.4f}  "
               f"(best so far: {best_val_loss:.4f})")
+
+        wandb.log({
+            "val/loss":      val_loss,
+            "val/best_loss": min(best_val_loss, val_loss),
+        }, step=global_step)
 
         log_writer.writerow({
             "epoch"         : epoch + 1,
@@ -794,6 +841,7 @@ def train():
 
     # --- Save plots ---
     save_plots(str(log_path), CONFIG["plot_dir"])
+    wandb.finish()
 
 
 if __name__ == "__main__":

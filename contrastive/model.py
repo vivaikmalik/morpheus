@@ -14,13 +14,19 @@ class MoleculeEncoder(nn.Module):
         batch_size, seq_len = input_ids.shape
         padding_mask = (input_ids == pad_token_id)
         attention_mask = (~padding_mask).long()
+
+        # Token + timestep embeddings (no additive positional embedding;
+        # position is injected via RoPE inside each self-attention block).
         x = self.molecular_model.token_embedding(input_ids)
-        x = x + self.molecular_model.pos_embedding(seq_len, device)
         t = torch.zeros((batch_size, 1), device=device)
         x = x + self.molecular_model.timestep_embedding(t).unsqueeze(1)
         x = self.molecular_model.input_norm(x)
+
+        # Compute RoPE cos/sin tables once.
+        rope = self.molecular_model.rope(seq_len, device=device, dtype=x.dtype)
+
         for block in self.molecular_model.blocks:
-            x = block(x, padding_mask)
+            x = block(x, padding_mask, rope=rope)
         x = self.molecular_model.output_norm(x)
         return mean_pool_last_hidden(x, attention_mask)
 

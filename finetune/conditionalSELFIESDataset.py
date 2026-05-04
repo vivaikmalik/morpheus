@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 
 
 class ConditionalSELFIESDataset(Dataset):
-    def __init__(self, df, tokenizer, max_length=74):
+    def __init__(self, df, tokenizer, max_length=256):
         self.df = df.reset_index(drop=True)
         self.tokenizer = tokenizer
         self.max_length = max_length

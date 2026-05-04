@@ -62,13 +62,13 @@ from tokenizer.chemicalTokenizer import ChemicalTokenizer
 # =============================================================================
 
 def load_molecule_backbone(mol_ckpt_path: Path, tokenizer_path: Path, device):
-    """Load zinc_5M_pretrain.pt and return (chem_tokenizer, MoleculeEncoder, mol_config).
+    """Load zinc_17M_pretrain.pt and return (chem_tokenizer, MoleculeEncoder, mol_config).
 
-    The contrastive backbone uses self-attention-only TransformerBlocks (no
-    cross-attention), matching the architecture of the zinc_5M_pretrain.pt
-    checkpoint which predates the cross-attention addition to the fine-tune model.
+    The contrastive backbone uses self-attention-only blocks (no cross-attention),
+    matching the PretrainDiffusionModel architecture.  RoPE is used for positional
+    encoding (buffer-only, no trainable params).
     """
-    from model.embeddings       import TimestepEmbedding, PositionalEmbedding
+    from model.embeddings       import TimestepEmbedding, RotaryEmbedding
     from model.transformerBlock import SelfAttention, FeedForward
 
     chem_tokenizer = ChemicalTokenizer(str(tokenizer_path))
@@ -83,8 +83,8 @@ def load_molecule_backbone(mol_ckpt_path: Path, tokenizer_path: Path, device):
             self.norm2     = nn.LayerNorm(h)
             self.ffn       = FeedForward(h, f, dropout=0.0)
 
-        def forward(self, x, padding_mask=None):
-            x = x + self.attention(self.norm1(x), padding_mask)
+        def forward(self, x, padding_mask=None, rope=None):
+            x = x + self.attention(self.norm1(x), padding_mask, rope=rope)
             x = x + self.ffn(self.norm2(x))
             return x
 
@@ -94,10 +94,14 @@ def load_molecule_backbone(mol_ckpt_path: Path, tokenizer_path: Path, device):
             h, n, f = mc["hidden_size"], mc["num_heads"], mc["ffn_dim"]
             v, ml   = mc["vocab_size"], mc["max_length"]
             self.token_embedding    = nn.Embedding(v, h)
-            self.pos_embedding      = PositionalEmbedding(ml, h)
             self.timestep_embedding = TimestepEmbedding(h)
             self.input_norm         = nn.LayerNorm(h)
-            self.blocks             = nn.ModuleList(
+            head_dim = h // n
+            self.rope = RotaryEmbedding(
+                head_dim=head_dim,
+                max_length=max(ml, 4096),
+            )
+            self.blocks = nn.ModuleList(
                 [_SABlock(h, n, f) for _ in range(mc["num_layers"])]
             )
             self.output_norm = nn.LayerNorm(h)
@@ -368,8 +372,8 @@ def main():
                         help="Column name for SELFIES strings")
 
     # Checkpoints
-    parser.add_argument("--mol_ckpt",        default="checkpoints/zinc_5M_pretrain.pt",
-                        help="Molecular backbone checkpoint (zinc_5M_pretrain.pt)")
+    parser.add_argument("--mol_ckpt",        default="checkpoints/zinc_17M_pretrain.pt",
+                        help="Molecular backbone checkpoint (zinc_17M_pretrain.pt)")
     parser.add_argument("--tokenizer_path",  default="chemical_tokenizer.json",
                         help="Path to chemical_tokenizer.json")
     parser.add_argument("--resume_ckpt",     default=None,

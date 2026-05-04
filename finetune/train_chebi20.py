@@ -37,6 +37,7 @@ import selfies as sf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import wandb
 from rdkit import Chem, DataStructs
 from rdkit.Chem import AllChem, Descriptors, MACCSkeys, QED
 from torch.optim import AdamW
@@ -84,7 +85,7 @@ CONFIG = {
     "num_heads"   : 8,
     "ffn_dim"     : 1024,
     "num_layers"  : 8,
-    "max_length"  : 74,
+    "max_length"  : 256,
     "dropout"     : 0.1,
     "text_model"  : "BAAI/bge-large-en-v1.5",
     "uncond_prob" : 0.1,
@@ -97,9 +98,12 @@ CONFIG = {
     "num_epochs"           : 10,
     "warmup_steps"         : 500,      # fixed steps, not ratio
 
-    # Loss weights (EOS fix applied from the start)
-    "eos_weight"  : 5.0,
-    "pad_weight"  : 0.05,
+    # Loss weights (revealPad-style: EOS treated as a normal token, PAD
+    # mildly downweighted). The previous eos_weight=5.0 / pad_weight=0.05
+    # destabilized fine-tuning -- reverted to the values used by the
+    # stable revealPad-branch loss.
+    "eos_weight"  : 1.0,
+    "pad_weight"  : 0.1,
 
     # Validation
     "val_every"           : 500,
@@ -119,7 +123,7 @@ CONFIG = {
 
     # Data
     "hf_dataset_id"   : "liupf/ChEBI-20-MM",
-    "max_selfies_len" : 73,    # +1 EOS = 74
+    "max_selfies_len" : 255,    # +1 EOS = 256
     "data_dir"        : str(PROJECT_ROOT / "data"),
     "train_csv"       : str(PROJECT_ROOT / "data" / "chebi20_train.csv"),
     "val_csv"         : str(PROJECT_ROOT / "data" / "chebi20_val.csv"),
@@ -142,6 +146,9 @@ CONFIG = {
     "seed"        : 42,
     "log_every"   : 50,
     "freeze_text_encoder": True,
+
+    # W&B
+    "wandb_project" : "morpheus-chebi20",
 }
 
 
@@ -210,7 +217,7 @@ def _load_contrastive_scorer(ckpt_path: str, device):
     rather than the current TransformerBlock which has cross-attention.
     The aligner is frozen and set to eval mode.
     """
-    from model.embeddings import TimestepEmbedding, PositionalEmbedding
+    from model.embeddings import TimestepEmbedding, RotaryEmbedding
     from model.transformerBlock import SelfAttention, FeedForward
     from contrastive.model import MoleculeEncoder, ContrastiveAligner
     from transformers import AutoModel, AutoTokenizer
@@ -231,8 +238,8 @@ def _load_contrastive_scorer(ckpt_path: str, device):
             self.norm2     = nn.LayerNorm(hidden_size)
             self.ffn       = FeedForward(hidden_size, ffn_dim, dropout=0.0)
 
-        def forward(self, x, padding_mask=None):
-            x = x + self.attention(self.norm1(x), padding_mask)
+        def forward(self, x, padding_mask=None, rope=None):
+            x = x + self.attention(self.norm1(x), padding_mask, rope=rope)
             x = x + self.ffn(self.norm2(x))
             return x
 
@@ -242,9 +249,13 @@ def _load_contrastive_scorer(ckpt_path: str, device):
             h, n, f = mc["hidden_size"], mc["num_heads"], mc["ffn_dim"]
             v, ml   = mc["vocab_size"], mc["max_length"]
             self.token_embedding    = nn.Embedding(v, h)
-            self.pos_embedding      = PositionalEmbedding(ml, h)
             self.timestep_embedding = TimestepEmbedding(h)
             self.input_norm         = nn.LayerNorm(h)
+            head_dim = h // n
+            self.rope = RotaryEmbedding(
+                head_dim=head_dim,
+                max_length=max(ml, 4096),
+            )
             self.blocks             = nn.ModuleList([
                 _SelfAttnOnlyBlock(h, n, f) for _ in range(mc["num_layers"])
             ])
@@ -410,17 +421,27 @@ def prepare_chebi20(tokenizer_path: Path, data_dir: Path) -> tuple:
 
 
 # =============================================================================
-# LOSS FUNCTION (eos_weight=5.0, pad_weight=0.05)
+# LOSS FUNCTION (revealPad-style: pad_weight=0.1, EOS treated as a normal token)
 # =============================================================================
 
 def diffusion_loss(logits, labels, timesteps, tokenizer,
-                   pad_weight=0.05, eos_weight=5.0):
+                   pad_weight=0.1, eos_weight=1.0):
+    """Diffusion loss with mild PAD downweighting and a (1-t) timestep schedule.
+
+    EOS is intentionally NOT upweighted: when eos_weight is left at 1.0 the
+    EOS token is treated like any other vocab token. The model picks up
+    sequence termination naturally from the masked-modeling objective
+    (sometimes the EOS itself is masked, sometimes nearby tokens are).
+    Heavy EOS upweighting (the old 5.0) caused the loss to spike whenever
+    EOS positions were masked at high noise levels and was empirically
+    unstable in fine-tuning.
+    """
     B, seq_len, vocab_size = logits.shape
     device = logits.device
 
     vocab_weights = torch.ones(vocab_size, device=device)
     vocab_weights[tokenizer.pad_token_id] = pad_weight
-    vocab_weights[tokenizer.eos_token_id] = eos_weight
+    vocab_weights[tokenizer.eos_token_id] = eos_weight  # 1.0 by default
 
     raw_loss = F.cross_entropy(
         logits.view(-1, vocab_size),
@@ -1213,11 +1234,20 @@ def train():
     print(f"[sched] {total_steps:,} total steps | {CONFIG['warmup_steps']} warmup steps")
     print(f"[loss]  eos_weight={CONFIG['eos_weight']}  pad_weight={CONFIG['pad_weight']}")
 
+    # ── W&B ────────────────────────────────────────────────────────────────────
+    wandb.init(
+        project  = CONFIG["wandb_project"],
+        config   = CONFIG,
+        reinit   = True,
+        settings = wandb.Settings(start_method="thread"),
+    )
+    print(f"[wandb] Run started: {wandb.run.url}")
+
     # ── CSV log ────────────────────────────────────────────────────────────────
     log_path = Path(CONFIG["log_path"])
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_columns = ["epoch", "step", "train_loss", "val_loss", "lr",
-                   "tokens_per_sec", "elapsed_min"]
+                   "grad_norm", "tokens_per_sec", "elapsed_min"]
     log_file   = open(log_path, "w", newline="")
     log_writer = csv.DictWriter(log_file, fieldnames=log_columns)
     log_writer.writeheader()
@@ -1260,7 +1290,9 @@ def train():
 
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), CONFIG["max_grad_norm"])
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                model.parameters(), CONFIG["max_grad_norm"]
+            ).item()
             optimizer.step()
             scheduler.step()
 
@@ -1277,10 +1309,19 @@ def train():
                 lr          = scheduler.get_last_lr()[0]
                 elapsed_min = (time.time() - t_start) / 60
                 bar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{lr:.2e}")
+
+                wandb.log({
+                    "train/loss":          loss.item(),
+                    "train/lr":            lr,
+                    "train/grad_norm":     grad_norm,
+                    "train/tokens_per_sec": tokens_per_sec_ema,
+                    "train/elapsed_min":   elapsed_min,
+                }, step=global_step)
+
                 log_writer.writerow({
                     "epoch": epoch+1, "step": global_step,
                     "train_loss": round(loss.item(), 6), "val_loss": "",
-                    "lr": round(lr, 8),
+                    "lr": round(lr, 8), "grad_norm": round(grad_norm, 4),
                     "tokens_per_sec": round(tokens_per_sec_ema, 1),
                     "elapsed_min": round(elapsed_min, 2),
                 })
@@ -1291,10 +1332,17 @@ def train():
                 last_val_loss = val_loss
                 elapsed_min   = (time.time() - t_start) / 60
                 print(f"\n  → Val loss: {val_loss:.4f}  (step {global_step})")
+
+                wandb.log({
+                    "val/loss":       val_loss,
+                    "val/best_loss":  min(best_val_loss, val_loss),
+                }, step=global_step)
+
                 log_writer.writerow({
                     "epoch": epoch+1, "step": global_step,
                     "train_loss": "", "val_loss": round(val_loss, 6),
                     "lr": round(scheduler.get_last_lr()[0], 8),
+                    "grad_norm": "",
                     "tokens_per_sec": round(tokens_per_sec_ema or 0, 1),
                     "elapsed_min": round(elapsed_min, 2),
                 })
@@ -1343,6 +1391,7 @@ def train():
     print(f"\nTraining complete.{' (early stop)' if stopped_early else ''}")
     print(f"Best val loss: {best_val_loss:.4f}")
 
+    wandb.log({"final/best_val_loss": best_val_loss})
     save_plots()
 
     # ── Test-set evaluation ────────────────────────────────────────────────────
@@ -1356,6 +1405,7 @@ def train():
         print("[eval] WARNING: best checkpoint not found, evaluating current weights.")
 
     evaluate_test_set(model, tokenizer, hf_tokenizer, device, test_csv)
+    wandb.finish()
 
 
 if __name__ == "__main__":
