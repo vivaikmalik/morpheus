@@ -103,4 +103,4 @@ No new specific file references; all evidence already mapped above.
 
 ## Known issues
 
-Note: scripts/rl_distribution_analysis.py has unfilled f-string placeholders at script lines 362 and 364 (inner strings inside a conditional f-string expression that are not f-prefixed); the archived rl_distribution_summary.md reflects correct values from a pre-bug run. Re-running the script would produce output with literal '{var:.1f}' text rather than computed values.
+Note: scripts/rl_distribution_analysis.py previously had unfilled f-string placeholders at lines 362 and 364 (inner conditional-expression strings that were not f-prefixed); fixed in commit 98e8e70. The archived rl_distribution_summary.md reflects values from the pre-fix run.
