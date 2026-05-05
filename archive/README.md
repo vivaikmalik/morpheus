@@ -1,6 +1,6 @@
 # archive/
 
-Frozen records from the cleanup of feature/dep-aware-decoding. Files here describe state at archival time; they are not maintained.
+Frozen records from the cleanup of feature/dep-aware-decoding. Files here describe state at archival time; they are not maintained. See paper_claim_index.md for the map from paper claims to source files.
 
 ## audits/
 
