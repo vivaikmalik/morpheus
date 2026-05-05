@@ -2,8 +2,8 @@
 
 **Purpose**: Complete context for implementing swappable commit strategies in MaskGIT-style
 sampling for the Morpheus discrete-diffusion molecule generator.  
-**Audience**: A downstream Claude session that will add `commit_strategy` logic without
-having read any other file in the repo.
+**Audience**: A future contributor implementing new commit strategies without prior
+context in this codebase.
 
 ---
 
@@ -19,8 +19,7 @@ molgen/
 ├── tokenizer/
 │   └── chemicalTokenizer.py       # ChemicalTokenizer: encode(selfies_str), decode(ids)
 ├── inference/
-│   ├── evaluate_prompted.py       # PRIMARY inference CLI for ChEBI-20 (text-conditioned)
-│   └── evaluate.py                # Unconditional generation from pretrain checkpoint
+│   └── evaluate_prompted.py       # PRIMARY inference CLI for ChEBI-20 (text-conditioned)
 ├── finetune/
 │   └── train_chebi20.py           # Training + CANONICAL evaluation pipeline
 ├── contrastive/                   # Contrastive aligner (used for reranking)
