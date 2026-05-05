@@ -64,7 +64,7 @@ Map from paper text to the file in this repo that supports the claim. Paths refl
 |-------|-----------------|
 | ZINC250K = 249,455 molecules | data/combined_pretrain_v1/raw/zinc250k_raw_dl.csv (untracked) |
 | ChEBI-20 split 20,158 / 2,504 / 2,542 | data/chebi20_train.csv, data/chebi20_val.csv, data/chebi20_test.csv |
-| 23% excluded by 74-token cap; 60 vs 23 heavy atoms | outputs/truncation_analysis.md |
+| 23% excluded by 74-token cap; 60 vs 23 heavy atoms | archive/investigations/truncation_analysis.md |
 
 ## Section §5 results — per-claim evidence
 
@@ -80,15 +80,15 @@ Map from paper text to the file in this repo that supports the claim. Paths refl
 | Table 2: SciBERT 20ep Morgan 0.299 | outputs/chebi20_27M_scibert_20ep_contrastive_eval_cfg1.5_t0.6_s50.csv |
 | Table 2: SciBERT 20ep + rerank10 Morgan 0.310 | outputs/chebi20_27M_scibert_20ep_contrastive_eval_cfg1.5_t0.6_s50_rerank10.csv |
 | Table 3: ring-stratified analysis | outputs/stratified_analysis_best_model.csv |
-| Table 4: probe top-1 accuracy 79.1% / 90.9% / 95.1% (40ep) | outputs/probe_token_knowledge_40ep.md; outputs/probe_token_knowledge_raw_40ep.csv |
-| Table 4: probe 20ep ring_count 77.6% | outputs/probe_token_knowledge.md; outputs/probe_token_knowledge_raw.csv |
-| §5.4 ring-count "around 40%" at generation | outputs/branch_audit_summary.md (39.7% molecule-level) — see archived 40pct_source_audit.md for caveat |
-| Table 5: dep-aware Δ Morgan +0.001 / −0.004 / −0.002 | outputs/chebi20_27M_scibert_20ep_contrastive_eval_cfg1.5_t0.6_s50_eost_FULL_DEPAWARE.csv (vs FULL_STANDARD); outputs/replication_results.md |
+| Table 4: probe top-1 accuracy 79.1% / 90.9% / 95.1% (40ep) | archive/investigations/probe_token_knowledge_40ep.md; outputs/probe_token_knowledge_raw_40ep.csv |
+| Table 4: probe 20ep ring_count 77.6% | archive/investigations/probe_token_knowledge.md; outputs/probe_token_knowledge_raw.csv |
+| §5.4 ring-count "around 40%" at generation | archive/investigations/branch_audit_summary.md (39.7% molecule-level) — see archived 40pct_source_audit.md for caveat |
+| Table 5: dep-aware Δ Morgan +0.001 / −0.004 / −0.002 | outputs/chebi20_27M_scibert_20ep_contrastive_eval_cfg1.5_t0.6_s50_eost_FULL_DEPAWARE.csv (vs FULL_STANDARD); archive/investigations/replication_results.md |
 | Table 5: iterative refinement deltas | outputs/chebi20_27M_scibert_40ep_contrastive_eval_cfg1.5_t0.7_s50_refine*.csv |
 | Table 6: RL final QED 0.742/0.799/0.818/0.837 | outputs/evaluations/eval_base_model.csv, eval_rl_qed_only.csv, eval_rl_qed_mw_50step.csv, eval_rl_qed_mw_div_50step.csv |
 | Figure 1 training trajectories | outputs/plots/comparison/training_curves_comparison.png |
-| Dep-aware investigation | outputs/dep_aware_investigation.md, outputs/dep_aware_verification.md |
-| Replication 4-seed verdict | outputs/replication_results.md; outputs/replication_seed{43,44,45}_{standard,dep_aware}.csv |
+| Dep-aware investigation | archive/investigations/dep_aware_investigation.md, archive/investigations/dep_aware_verification.md |
+| Replication 4-seed verdict | archive/investigations/replication_results.md; outputs/replication_seed{43,44,45}_{standard,dep_aware}.csv |
 | §5.5 hard-cell subset n=20/seed | data/chebi20_smoke_hard40_seed{42,43,44,45}*.csv |
 
 ## Section §6 discussion / §7 limitations / §8 conclusion
