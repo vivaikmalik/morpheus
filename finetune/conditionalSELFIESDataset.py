@@ -1,8 +1,14 @@
+"""ChEBI-20 (prompt, SELFIES) dataset with EOS-then-pad encoding to a fixed length."""
 import torch
 from torch.utils.data import Dataset
 
 
 class ConditionalSELFIESDataset(Dataset):
+    """Tokenizes the SELFIES response, truncates to max_length-1, appends EOS, then pads.
+
+    Returns input_ids and the raw prompt string per sample; text tokenization happens in
+    the collator."""
+
     def __init__(self, df, tokenizer, max_length=74):
         self.df = df.reset_index(drop=True)
         self.tokenizer = tokenizer

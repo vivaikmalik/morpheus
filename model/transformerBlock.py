@@ -1,9 +1,12 @@
+"""Self-attention, cross-attention, FFN, and the pre-norm block they compose."""
 import torch
 import torch.nn as nn
 import math
 import torch.nn.functional as F
 
 class SelfAttention(nn.Module):
+    """Multi-head self-attention with padding-aware mask."""
+
     def __init__(self, hidden_size, num_heads, dropout=0.1):
         super().__init__()
         self.hidden_size = hidden_size
@@ -49,6 +52,11 @@ class SelfAttention(nn.Module):
 
 
 class CrossAttention(nn.Module):
+    """Multi-head cross-attention from sequence queries to text-embedding keys/values.
+
+    Output projection is zero-initialized so cross-attention contributes nothing at the
+    start of fine-tuning, preserving the unconditional pretrain behavior exactly."""
+
     def __init__(self, hidden_size, num_heads, dropout=0.1):
         super().__init__()
         self.hidden_size = hidden_size
@@ -99,6 +107,8 @@ class CrossAttention(nn.Module):
 
 
 class FeedForward(nn.Module):
+    """Two-layer feed-forward network with SiLU activation."""
+
     def __init__(self, hidden_size, ffn_dim, dropout=0.1):
         super().__init__()
         self.net = nn.Sequential(
@@ -113,6 +123,8 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
+    """Pre-norm block: self-attention, cross-attention to text embeddings, then FFN."""
+
     def __init__(self, hidden_size, num_heads, ffn_dim, dropout=0.1):
         super().__init__()
 

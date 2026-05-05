@@ -1,3 +1,4 @@
+"""Discrete diffusion model for SELFIES sequences with cross-attention to a text encoder."""
 import torch
 import torch.nn as nn
 import sys
@@ -10,6 +11,11 @@ from model.transformerBlock import TransformerBlock
 
 
 class MolecularDiffusionModel(nn.Module):
+    """Bidirectional transformer trained as a discrete diffusion model over SELFIES tokens.
+
+    Cross-attention layers bind the sequence to per-token text embeddings; CFG dropout
+    during training and a learned null token at inference handle the unconditional path."""
+
     def __init__(
         self,
         vocab_size,

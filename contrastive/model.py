@@ -1,3 +1,4 @@
+"""Symmetric InfoNCE aligner between a frozen text encoder and a frozen molecule backbone."""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,6 +6,11 @@ from typing import Optional
 from .utils import mean_pool_last_hidden
 
 class MoleculeEncoder(nn.Module):
+    """Wraps the unconditional diffusion backbone for use as a fixed-context encoder.
+
+    Runs a single forward pass at t=0 with self-attention only, then mean-pools across
+    non-padding positions."""
+
     def __init__(self, molecular_model):
         super().__init__()
         self.molecular_model = molecular_model
@@ -25,6 +31,11 @@ class MoleculeEncoder(nn.Module):
         return mean_pool_last_hidden(x, attention_mask)
 
 class ContrastiveAligner(nn.Module):
+    """Two-tower model with frozen text and molecule encoders plus trainable projections.
+
+    Returns L2-normalized embeddings in a shared space; project_molecule=True maps both
+    towers to proj_dim, otherwise the molecule tower stays at its native dim."""
+
     def __init__(self, text_model, molecule_encoder, text_hidden, mol_hidden, proj_dim, project_molecule=True):
         super().__init__()
         self.text_model = text_model
@@ -57,11 +68,13 @@ class ContrastiveAligner(nn.Module):
         return z_text, z_mol
 
 def contrastive_loss(z_text, z_mol, temperature=0.07):
+    """Symmetric InfoNCE loss with temperature tau and in-batch negatives."""
     logits = (z_text @ z_mol.T) / temperature
     labels = torch.arange(logits.shape[0], device=logits.device)
     return 0.5 * (F.cross_entropy(logits, labels) + F.cross_entropy(logits.T, labels))
 
 def retrieval_metrics(z_text, z_mol, ks=(1, 5, 10)):
+    """Returns recall@k for k in ks, mean rank, and MRR over a square text/mol similarity matrix."""
     import numpy as np
     sims = z_text @ z_mol.T
     sorted_idx = torch.argsort(sims, dim=1, descending=True)
