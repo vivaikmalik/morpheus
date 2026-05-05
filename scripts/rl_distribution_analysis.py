@@ -5,9 +5,11 @@ Analyses: distribution stats, comparison plots, concentration metrics,
 KL divergence vs ZINC reference, tail behavior, and summary.
 """
 
+import argparse
 import os
 import sys
 import warnings
+from pathlib import Path
 warnings.filterwarnings("ignore")
 
 import numpy as np
@@ -26,7 +28,11 @@ from rdkit.Chem import Descriptors, QED
 # ──────────────────────────────────────────────
 # Paths
 # ──────────────────────────────────────────────
-MOLGEN = "/Users/lirobert/Library/Mobile Documents/com~apple~CloudDocs/Documents/Documents - Li\u2019s MacBook Air/UdeM/IFT6759 (Advanced Machine Learning Projects)/molgen"
+_parser = argparse.ArgumentParser(add_help=False)
+_parser.add_argument("--molgen", type=str, default=None,
+                     help="Path to molgen repo root (defaults to script's parent.parent)")
+_args, _ = _parser.parse_known_args()
+MOLGEN = Path(_args.molgen) if _args.molgen else Path(__file__).resolve().parent.parent
 EVALS  = f"{MOLGEN}/outputs/evaluations"
 PLOTS  = f"{MOLGEN}/outputs/plots/comparison"
 OUT    = f"{MOLGEN}/outputs"
