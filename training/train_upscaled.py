@@ -4,9 +4,10 @@ training/train_upscaled.py
 Stage 1 pretraining of the upscaled (~27M param, Config C) diffusion model
 on ZINC250K. Unconditional — no text conditioning.
 
-The checkpoint format is compatible with finetune/train_text_condition.py:
-load with strict=False and the cross-attention / text-projector layers will
-be kept at their zero-initialized values, ready for Stage 2 fine-tuning.
+The checkpoint format follows a Stage-1-then-Stage-2 convention: load with
+strict=False and the cross-attention / text-projector layers will be kept
+at their zero-initialized values, ready for Stage 2 fine-tuning by
+finetune/train_chebi20.py.
 
 Usage:
     python training/train_upscaled.py

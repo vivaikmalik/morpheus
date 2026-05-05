@@ -53,7 +53,7 @@ if len(valid) == 0:
 # ---------------------------------------------------------------------------
 # Step 3 — Check novelty
 # ---------------------------------------------------------------------------
-# canonical_smiles column was already computed by evaluate.py via RDKit
+# canonical_smiles column was computed by archive/old_code/inference_evaluate_v1.py via RDKit
 novel     = valid[~valid["canonical_smiles"].isin(training_set)]
 not_novel = valid[ valid["canonical_smiles"].isin(training_set)]
 
