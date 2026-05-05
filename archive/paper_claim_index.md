@@ -100,3 +100,7 @@ No new specific file references; all evidence already mapped above.
 - Evaluation CSVs in `outputs/` (top level, ~110 files) are run records; they remain at their current paths after cleanup.
 - Audit/investigation MDs in `outputs/` (the ~19 `.md` files) are scheduled to move to `archive/investigations/` in a later cleanup step. When that happens, this index will be updated in the same commit.
 - `outputs/plots/`, `outputs/slides/`, `outputs/rl/` subdirectories are not affected by cleanup.
+
+## Known issues
+
+Note: scripts/rl_distribution_analysis.py has unfilled f-string placeholders at script lines 362 and 364 (inner strings inside a conditional f-string expression that are not f-prefixed); the archived rl_distribution_summary.md reflects correct values from a pre-bug run. Re-running the script would produce output with literal '{var:.1f}' text rather than computed values.
