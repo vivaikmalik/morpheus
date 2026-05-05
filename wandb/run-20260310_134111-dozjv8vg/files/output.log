@@ -1,0 +1,31 @@
+
+--- Epoch 1/13 ---
+Traceback (most recent call last):
+  File "C:\Users\samyb\PythonProjects\morpheus\training\train.py", line 424, in <module>
+    train()
+    ~~~~~^^
+  File "C:\Users\samyb\PythonProjects\morpheus\training\train.py", line 353, in train
+    logits = model(input_ids, timesteps)
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\nn\modules\module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\nn\modules\module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "C:\Users\samyb\PythonProjects\morpheus\model\molecularDiffusionModel.py", line 126, in forward
+    x = block(x, padding_mask)                   # (B, seq_len, hidden_size)
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\nn\modules\module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\nn\modules\module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "C:\Users\samyb\PythonProjects\morpheus\model\transformerBlock.py", line 98, in forward
+    x = self.attention(x, padding_mask)      # attend
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\nn\modules\module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\samyb\pytorch_gpu\Lib\site-packages\torch\nn\modules\module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "C:\Users\samyb\PythonProjects\morpheus\model\transformerBlock.py", line 39, in forward
+    Q = Q.view(B, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: shape '[256, 74, 12, 21]' is invalid for input of size 4849664

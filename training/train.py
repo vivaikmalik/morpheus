@@ -28,18 +28,18 @@ CONFIG = {
     "hidden_size" : 256,
     "num_heads"   : 8,
     "ffn_dim"     : 512,
-    "num_layers"  : 6,
+    "num_layers"  : 8,
     "max_length"  : 74,
     "dropout"     : 0.1,
 
     # Training
     "batch_size"           : 256,
     "gradient_accumulation": 1,
-    "learning_rate"        : 3e-4,
+    "learning_rate"        : 6e-4,
     "weight_decay"         : 0.01,
     "max_grad_norm"        : 1.0,
-    "num_epochs"           : 10,
-    "warmup_steps"         : 500,
+    "num_epochs"           : 13,
+    "warmup_steps"         : 1000,
 
     # Data
     "val_fraction" : 0.05,
@@ -66,12 +66,18 @@ CONFIG = {
 # LOSS FUNCTION
 # =============================================================================
 
-def diffusion_loss(logits, labels, timesteps):
+def diffusion_loss(logits, labels, timesteps, pad_token_id=0):
     B, seq_len, vocab_size = logits.shape
+    device = logits.device
+
+    vocab_weights = torch.ones(vocab_size, device=device)
+
+    vocab_weights[pad_token_id] = 0.1
 
     raw_loss = torch.nn.functional.cross_entropy(
         logits.view(-1, vocab_size),
         labels.view(-1),
+        weight=vocab_weights,
         ignore_index=-100,
         reduction='none'
     )
@@ -133,7 +139,6 @@ def generate_samples(model, tokenizer, device, step):
             step_t = t_val.repeat(num_mols).unsqueeze(-1)
             logits = model(input_ids, step_t)
 
-            logits[:, :, tokenizer.pad_token_id]  = float('-inf')
             if step_idx < num_steps - 1:
                 logits[:, :, tokenizer.mask_token_id] = float('-inf')
 
@@ -159,7 +164,6 @@ def generate_samples(model, tokenizer, device, step):
         ids = input_ids[i].cpu().tolist()
         if tokenizer.eos_token_id in ids:
             ids = ids[:ids.index(tokenizer.eos_token_id)]
-        ids = [id for id in ids if id != tokenizer.mask_token_id]
 
         selfies_str = tokenizer.decode(ids)
         token_count = len(ids)
